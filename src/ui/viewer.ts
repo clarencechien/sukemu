@@ -18,7 +18,7 @@ export type Viewer = {
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-export function initViewer(): Viewer {
+export function initViewer(onEdit?: (result: Result) => void): Viewer {
   const stage = $('stage');
   const plate = $<HTMLImageElement>('plate');
   const acetate = $('acetate');
@@ -142,6 +142,7 @@ export function initViewer(): Viewer {
       b.zh = ed.textContent ?? '';
       (acetate.querySelectorAll('.blk')[cur].querySelector('.txt') as HTMLElement).textContent = b.zh;
       (noteEls[cur].querySelector('.z') as HTMLElement).textContent = b.zh;
+      onEdit?.(docs[docIdx].result);
     };
   }
 
