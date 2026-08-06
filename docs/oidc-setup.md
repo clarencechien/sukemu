@@ -90,11 +90,24 @@ npm run deploy
 
 > **沒有 `gemini-3.6-flash-lite`**——3.6 只出 Flash,lite 檔位停在 3.5。
 
+### 模型檔位(ADR 0001)
+
+兩個模式,模型都在 `wrangler.jsonc` vars,**預設 `fast`**:
+
+| 模式 | var | 模型 | 一般菜單 |
+|---|---|---|---|
+| ⚡ 快速(預設) | `FAST_MODEL` | `gemini-3.5-flash-lite` | ≈ NT$0.51 |
+| ⚖ 精準 | `ACCURATE_MODEL` | `gemini-3.6-flash` | ≈ NT$1.37 |
+
+- 全域切換:改 `DEFAULT_MODE` 為 `"accurate"` 重新部署
+- 單張切換:App 頂列的檔位鈕,切了之後同一張圖會**重翻**(不吃舊快取),選擇記在瀏覽器
+- P2 想單獨用別的模型:設 `FAST_MODEL_P2` / `ACCURATE_MODEL_P2`
+
 ### 一張多少錢(匯率 31.5)
 
 token 用量為估計值,實際以 app 提示與 `/admin` 顯示為準。
 
-| 情境 | 3.5 Flash | 3.6 Flash | 3.5 Flash-Lite | 3.1 Flash-Lite |
+| 情境 | 3.5 Flash | 3.6 Flash(精準) | 3.5 Flash-Lite(快速) | 3.1 Flash-Lite |
 |---|---|---|---|---|
 | 簡單招牌(2–3 塊) | NT$0.76 | NT$0.56 | NT$0.20 | NT$0.13 |
 | 一般菜單(~11 塊) | NT$1.89 | NT$1.37 | NT$0.51 | NT$0.32 |

@@ -20,9 +20,17 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["QuotaCounter"] }],
   "vars": {
-    // 模型可在此換;P2 輸入小,值得換 Pro 級(handoff §13 待 A/B)
-    "GEMINI_MODEL": "gemini-3.5-flash",
-    "GEMINI_MODEL_P2": "gemini-3.5-flash",
+    // 模型檔位(決策見 docs/adr/0001-fast-accurate-model-modes.md):
+    //   fast     省錢優先,一般菜單 ≈ NT$0.51 ← 預設
+    //   accurate 品質優先,一般菜單 ≈ NT$1.37
+    // 框準度不夠就把 DEFAULT_MODE 改成 "accurate" 重新部署;
+    // 前端也有切換鈕,單張可臨時改用精準模式重翻。
+    "DEFAULT_MODE": "fast",
+    "FAST_MODEL": "gemini-3.5-flash-lite",
+    "ACCURATE_MODEL": "gemini-3.6-flash",
+    // P2 只佔 8–19% 成本,要單獨調就設這兩個(不設 = 同該模式的主模型)
+    // "FAST_MODEL_P2": "gemini-3.6-flash",
+    // "ACCURATE_MODEL_P2": "gemini-3.1-pro-preview",
     // 額度分級:每日「張數」,0 = 無上限。加級別、在名單標人都不用改碼
     "QUOTA_TIERS": "{\"admin\":0,\"pro\":200,\"beta\":30,\"trial\":5}",
     "DEFAULT_TIER": "beta",

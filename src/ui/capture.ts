@@ -7,6 +7,7 @@ import { api, ApiError } from '../api';
 import { docStore, recordIds } from '../db';
 import { refreshHistory } from './history';
 import { refreshUsage } from './login';
+import { modelMode } from './mode';
 import type { Viewer } from './viewer';
 
 const MAX_EDGE = 2048;
@@ -58,11 +59,12 @@ export function initCapture(viewer: Viewer) {
     try {
       show('上傳中');
       const { b64, mime, url, blob, thumb } = await prep(file);
+      const mode = modelMode();
 
-      // 同一張圖翻過就直接開紀錄,不重新上傳翻譯
+      // 同一張圖 + 同一檔位翻過就直接開紀錄,不重新上傳翻譯
       const hash = await sha256(blob);
       try {
-        const hit = await docStore.findByHash(hash);
+        const hit = await docStore.findByHash(hash, mode);
         if (hit) {
           const result = { name: hit.name, lang: hit.lang, blocks: hit.blocks };
           recordIds.set(result, hit.id!);
@@ -74,8 +76,8 @@ export function initCapture(viewer: Viewer) {
         /* IndexedDB 不可用時照常走翻譯 */
       }
 
-      show('讀取版面・翻譯');
-      const { result, usage: u1 } = await api.p1(b64, mime, name);
+      show(mode === 'accurate' ? '讀取版面・翻譯(精準)' : '讀取版面・翻譯');
+      const { result, usage: u1 } = await api.p1(b64, mime, name, mode);
       if (!result.blocks.length) {
         fail('沒有偵測到可翻譯的文字');
         return;
@@ -87,6 +89,7 @@ export function initCapture(viewer: Viewer) {
       try {
         id = await docStore.save({
           hash,
+          mode,
           at: new Date().toISOString(),
           name: result.name,
           lang: result.lang,
@@ -101,7 +104,7 @@ export function initCapture(viewer: Viewer) {
       }
 
       show('在地化');
-      const { edits, usage: u2 } = await api.p2(result.lang, result.blocks);
+      const { edits, usage: u2 } = await api.p2(result.lang, result.blocks, mode);
       viewer.applyEdits(result, edits);
       if (id != null) docStore.updateBlocks(id, result.blocks).catch(() => {});
       const twd = (u1?.twd ?? 0) + (u2?.twd ?? 0);

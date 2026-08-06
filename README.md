@@ -4,7 +4,7 @@
 
 **透ける**(sukeru,穿透、透明)+ mu。與 [manemu](https://manemu.ai-apps.work/) 同一個命名家族與產品家族(manemu 是紅,sukemu 是青)。
 
-規格見 [`docs/handoff.md`](docs/handoff.md);互動原型(規格書)見 [`docs/mockup/acetate-lens.html`](docs/mockup/acetate-lens.html);**OIDC/配額/價格設定見 [`docs/oidc-setup.md`](docs/oidc-setup.md)**。
+規格見 [`docs/handoff.md`](docs/handoff.md);互動原型(規格書)見 [`docs/mockup/acetate-lens.html`](docs/mockup/acetate-lens.html);**OIDC/配額/價格設定見 [`docs/oidc-setup.md`](docs/oidc-setup.md)**;架構決策紀錄見 [`docs/adr/`](docs/adr/)。
 
 ## 部署(Cloudflare Workers)
 
@@ -27,19 +27,18 @@ npm run deploy                                # build + wrangler deploy
 - **管理頁 `/admin`**(僅 `ADMIN_EMAILS`):等候名單一鍵核准、改額度、看每人今日用量與估算成本
 - **配額**:每人一個 Durable Object 計「每日張數」,分級在 var `QUOTA_TIERS`(`{"admin":0,"pro":200,"beta":30,"trial":5}`,0 = 無上限),台灣時間早上 8 點重置;P1 成功才扣,失敗不計
 
-## 價格(TWD)
+## 模型檔位與價格(TWD)
 
-Worker 用 Gemini 回傳的實際 token 數即時估算:翻完提示「本次約 NT$X」、`/admin` 看每人當日累計。單價表按模型內建,**換 `GEMINI_MODEL` 自動換價**(可用 var `MODEL_PRICES` 覆寫)。
+兩個模式,模型寫在 `wrangler.jsonc`,**預設快速**(決策見 [ADR 0001](docs/adr/0001-fast-accurate-model-modes.md)):
 
-以匯率 31.5 估算,一張的成本:
+| 模式 | 模型 | 簡單招牌 | 一般菜單 | 複雜資訊圖 |
+|---|---|---|---|---|
+| ⚡ **快速**(預設) | `gemini-3.5-flash-lite` | NT$0.20 | NT$0.51 | NT$1.48 |
+| ⚖ 精準 | `gemini-3.6-flash` | NT$0.56 | NT$1.37 | NT$3.86 |
 
-| 情境 | `gemini-3.5-flash`(預設) | `gemini-3.6-flash` | `gemini-3.5-flash-lite` |
-|---|---|---|---|
-| 簡單招牌(2–3 塊) | NT$0.76 | NT$0.56 | NT$0.20 |
-| 一般菜單(~11 塊) | NT$1.89 | NT$1.37 | NT$0.51 |
-| 複雜資訊圖(30+ 塊) | NT$5.43 | NT$3.86 | NT$1.48 |
+全域切換改 `DEFAULT_MODE`;App 頂列也有檔位鈕,單張可切精準重翻(切換後同一張圖不吃舊快取)。
 
-**P1 佔 80–92% 的成本,其中八成以上是輸出+thinking**,影像輸入不到一成。換模型前先用 `scripts/ab-models.mjs` 跑同一張圖比框準度與成本。細節見 [`docs/oidc-setup.md`](docs/oidc-setup.md) §6。
+Worker 用 Gemini 回傳的實際 token 數即時估算:翻完提示「本次約 NT$X」、`/admin` 看每人當日累計。單價表按模型內建,**換模型自動換價**(可用 var `MODEL_PRICES` 覆寫)。**P1 佔 80–92% 的成本,其中八成以上是輸出+thinking**,影像輸入不到一成。換檔位前先用 `scripts/ab-models.mjs` 跑同一張圖比框準度與成本。細節見 [`docs/oidc-setup.md`](docs/oidc-setup.md) §6。
 
 ## 本機開發
 

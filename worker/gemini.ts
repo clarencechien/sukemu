@@ -67,6 +67,20 @@ export const P2_PROMPT = `你是台灣在地化編輯。輸入是一張圖片的
 
 export type TokenUsage = { inTok: number; outTok: number };
 
+/** 模型檔位(ADR 0001):fast 省錢優先(預設)、accurate 品質優先 */
+export type ModelMode = 'fast' | 'accurate';
+
+export const resolveMode = (env: Env, requested?: string): ModelMode =>
+  (requested || env.DEFAULT_MODE) === 'accurate' ? 'accurate' : 'fast';
+
+/** 模式 → 模型。P2 可用 *_MODEL_P2 單獨覆寫(P2 只佔 8–19% 成本,值得獨立調) */
+function modelFor(env: Env, mode: ModelMode, pass: 'p1' | 'p2'): string {
+  if (mode === 'accurate') {
+    return (pass === 'p2' ? env.ACCURATE_MODEL_P2 : '') || env.ACCURATE_MODEL || 'gemini-3.6-flash';
+  }
+  return (pass === 'p2' ? env.FAST_MODEL_P2 : '') || env.FAST_MODEL || 'gemini-3.5-flash-lite';
+}
+
 async function generateJSON(
   env: Env,
   model: string,
@@ -96,7 +110,8 @@ async function generateJSON(
     const { mediaResolution: _drop, ...rest } = config;
     res = await call(rest);
   }
-  if (!res.ok) throw new Error(`Gemini ${res.status}:${(await res.text()).slice(0, 400)}`);
+  // 錯誤訊息帶上模型名:換檔位後出問題時,要一眼看出是哪個模型在報錯
+  if (!res.ok) throw new Error(`Gemini ${res.status}(${model}):${(await res.text()).slice(0, 300)}`);
 
   const data = (await res.json()) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -141,8 +156,8 @@ export function estCostTwd(env: Env, model: string, usage: TokenUsage): number {
 
 const clampPct = (n: unknown) => Math.min(100, Math.max(0, Number(n) || 0));
 
-export async function runP1(env: Env, image: string, mime: string) {
-  const model = env.GEMINI_MODEL || 'gemini-3.5-flash';
+export async function runP1(env: Env, image: string, mime: string, mode: ModelMode) {
+  const model = modelFor(env, mode, 'p1');
   const { data, usage } = await generateJSON(
     env,
     model,
@@ -163,11 +178,11 @@ export async function runP1(env: Env, image: string, mime: string) {
     zh: String(b.zh ?? ''),
     ...(b.v === true ? { v: true } : {}),
   }));
-  return { lang: String(out.lang ?? '??').toUpperCase(), blocks, usage, model };
+  return { lang: String(out.lang ?? '??').toUpperCase(), blocks, usage, model, mode };
 }
 
-export async function runP2(env: Env, lang: string, blocks: { en: string; zh: string }[]) {
-  const model = env.GEMINI_MODEL_P2 || env.GEMINI_MODEL || 'gemini-3.5-flash';
+export async function runP2(env: Env, lang: string, blocks: { en: string; zh: string }[], mode: ModelMode) {
+  const model = modelFor(env, mode, 'p2');
   const input = JSON.stringify({
     lang,
     blocks: blocks.map((b, i) => ({ i, en: b.en, zh: b.zh })),
@@ -182,5 +197,5 @@ export async function runP2(env: Env, lang: string, blocks: { en: string; zh: st
       ...(typeof e.zh === 'string' && e.zh ? { zh: e.zh } : {}),
       ...(typeof e.nt === 'string' && e.nt ? { nt: e.nt } : {}),
     }));
-  return { edits, usage, model };
+  return { edits, usage, model, mode };
 }

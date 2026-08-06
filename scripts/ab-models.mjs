@@ -21,7 +21,8 @@ const PRICES = {
   'gemini-3.1-pro-preview': [2.0, 12.0],
 };
 const USD_TWD = Number(process.env.USD_TWD || 31.5);
-const DEFAULT_MODELS = ['gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+// 預設先比兩個正式檔位(ADR 0001),再附兩個備選
+const DEFAULT_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.5-flash'];
 
 // 與 worker/gemini.ts 保持一致——改了那邊記得同步這裡,否則 A/B 測到的不是正式行為
 const P1_PROMPT = `你是圖片版面分析與翻譯引擎。找出圖中所有非中文的文字塊,對每一塊回傳:

@@ -2,7 +2,8 @@ import type { Block, Result } from './types';
 
 /** P2 修訂:i 為 blocks 索引 */
 export type P2Edit = { i: number; zh?: string; nt?: string };
-export type ApiUsage = { inTok: number; outTok: number; twd: number };
+export type ModelMode = 'fast' | 'accurate';
+export type ApiUsage = { inTok: number; outTok: number; twd: number; model: string; mode: ModelMode };
 export type Me = {
   email: string;
   tier: string;
@@ -39,12 +40,13 @@ const post = (path: string, body: unknown) =>
   });
 
 export const api = {
-  config: (): Promise<{ mode: 'oidc' | 'dev'; turnstileSiteKey: string | null }> => req('/api/config'),
+  config: (): Promise<{ mode: 'oidc' | 'dev'; turnstileSiteKey: string | null; defaultModelMode: ModelMode }> =>
+    req('/api/config'),
   me: (): Promise<Me> => req('/api/me'),
   login: (email: string): Promise<{ email: string }> => post('/api/login', { email }),
   logout: (): Promise<void> => post('/api/logout', {}),
-  p1: (image: string, mime: string, name: string): Promise<{ result: Result; usage?: ApiUsage }> =>
-    post('/api/p1', { image, mime, name }),
-  p2: (lang: string, blocks: Block[]): Promise<{ edits: P2Edit[]; usage?: ApiUsage }> =>
-    post('/api/p2', { lang, blocks: blocks.map(({ en, zh }) => ({ en, zh })) }),
+  p1: (image: string, mime: string, name: string, modelMode: ModelMode): Promise<{ result: Result; usage?: ApiUsage }> =>
+    post('/api/p1', { image, mime, name, modelMode }),
+  p2: (lang: string, blocks: Block[], modelMode: ModelMode): Promise<{ edits: P2Edit[]; usage?: ApiUsage }> =>
+    post('/api/p2', { lang, blocks: blocks.map(({ en, zh }) => ({ en, zh })), modelMode }),
 };
