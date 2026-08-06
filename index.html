@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>sukemu すけむ</title>
+<meta name="description" content="拍一張照,sukemu 把外文翻成台灣正體中文,用一層透明標註疊回原圖上。">
+<meta name="theme-color" content="#41C9FF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="sukemu">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body data-screen="login" data-mode="overlay">
+
+<!-- ── 登入前(與 manemu 同構:wordmark+假名、命名文案、SSO、等候名單)── -->
+<div class="login" id="loginScreen">
+  <div class="wordmark">sukemu<span class="kana">すけむ</span></div>
+  <p class="tag">
+    <span class="suke">すけ</span>是透,<span class="mu">む</span>是夢。<br>
+    拍下看不懂的招牌、菜單、海報,<br>
+    sukemu 把譯文用一層透明標註疊回原圖——<br>
+    <b>不重繪、不遮蔽,按住就能看原圖。</b>
+  </p>
+  <ul class="privacy">
+    <li>原圖只在處理期間存在,完成即刪</li>
+    <li>譯文只存在你的裝置,伺服器不保留</li>
+    <li>不做公開分享連結,結果僅供個人參考</li>
+  </ul>
+  <div class="waitNotice hidden" id="waitNotice">
+    <b>🕓 已排上等候名單</b>
+    <span>這個 Google 帳號還不在受邀名單內,已自動幫你登記。<br>開通後,用同一個帳號再登入一次就能使用。</span>
+  </div>
+  <form method="POST" action="/auth/login" id="ssoForm">
+    <div id="tsWidget"></div>
+    <button class="sso" id="ssoBtn" type="submit">使用 Google 登入</button>
+  </form>
+  <p class="fine">封測中:登入後需在受邀名單內才能啟用翻譯。</p>
+  <button class="demo" id="demoBtn">先看示範 →</button>
+</div>
+
+<!-- ── App(原型移植)──────────────────────── -->
+<div class="app" id="appScreen">
+  <div class="bar">
+    <div class="mark"><b>sukemu</b><span>すけむ v0.1</span></div>
+    <div class="langs" id="langs">EN → <b>正體中文</b></div>
+    <div class="spacer"></div>
+    <label class="dial">縮放<input type="range" id="zoom" min="55" max="130" value="100" aria-label="圖片縮放"><b id="zoomv">100%</b></label>
+    <label class="dial">強度<input type="range" id="veil" min="0" max="60" value="30" aria-label="疊層強度"><b id="veilv">.30</b></label>
+    <button class="pick" id="swap">切換圖片</button>
+    <div class="seg" role="group" aria-label="顯示方式">
+      <button data-mode="overlay" aria-pressed="true">A 疊字<kbd>1</kbd></button>
+      <button data-mode="note" aria-pressed="false">C 註解<kbd>2</kbd></button>
+      <button data-mode="dot" aria-pressed="false">標點<kbd>3</kbd></button>
+      <button data-mode="off" aria-pressed="false">隱藏<kbd>4</kbd></button>
+    </div>
+    <button class="flip" id="flip">A ⇄ C <kbd>X</kbd></button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="frame" id="frame"><div class="plate"><img id="plate" alt=""><div class="acetate" id="acetate"></div></div></div>
+    <div class="notepane" id="notepane">
+      <div class="noteshead">
+        <h2>譯註 · <span id="ncount"></span></h2>
+        <div class="filters" role="group" aria-label="篩選">
+          <button data-filter="all" aria-pressed="true">全部</button>
+          <button data-filter="nt" aria-pressed="false">有譯註</button>
+          <button data-filter="low" aria-pressed="false">待複核</button>
+        </div>
+      </div>
+      <div class="notes" id="notes"></div>
+    </div>
+  </div>
+
+  <div class="deck">
+    <button class="hold" id="hold">按住看原圖<small>hold · 或按住 O</small></button>
+    <div class="insp" id="insp"></div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

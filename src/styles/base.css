@@ -1,0 +1,15 @@
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { height: 100% }
+body {
+  background: var(--room); color: var(--pale); font-family: var(--chrome);
+  display: flex; flex-direction: column;
+  height: 100vh; height: 100dvh; overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+.hidden { display: none !important }
+button { font-family: inherit }
+:is(button, [tabindex]):focus-visible { outline: 2px solid var(--cool); outline-offset: 2px }
+
+/* 畫面切換:登入前 / App */
+body[data-screen=login] .app { display: none }
+body[data-screen=app] .login { display: none }

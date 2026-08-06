@@ -1,0 +1,194 @@
+/* App 畫面:自原型(acetate-lens)移植,原型是互動與視覺規格書。 */
+.app { display: flex; flex-direction: column; flex: 1; min-height: 0 }
+
+/* ── 頂列 ───────────────────────────────────── */
+.bar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: .9rem; padding: .55rem 1rem;
+  border-bottom: 1px solid var(--edge); background: var(--panel); flex-wrap: wrap;
+}
+.mark b { font-weight: 700; font-size: .84rem; letter-spacing: .16em; text-transform: uppercase; color: #fff }
+.mark span { font-family: var(--doc); font-size: .6rem; color: var(--cool); margin-left: .5rem; letter-spacing: .2em }
+.langs { font-family: var(--data); font-size: .64rem; color: var(--mute) }
+.langs b { color: var(--cool); font-weight: 500 }
+.spacer { flex: 1 1 auto }
+.dial { display: flex; align-items: center; gap: .4rem; font-family: var(--data); font-size: .56rem; color: var(--mute) }
+.dial input { width: 5rem; accent-color: var(--cool) }
+.dial b { color: var(--pale); font-weight: 400; min-width: 2.1rem; text-align: right }
+.seg { display: flex; border: 1px solid var(--edge); border-radius: 2px; overflow: hidden }
+.seg button {
+  appearance: none; background: transparent; border: 0; border-right: 1px solid var(--edge);
+  color: var(--mute); font-family: var(--chrome); font-weight: 600; font-size: .64rem; letter-spacing: .1em;
+  text-transform: uppercase; padding: .38rem .6rem; cursor: pointer; white-space: nowrap;
+}
+.seg button:last-child { border-right: 0 }
+.seg button[aria-pressed=true] { background: var(--cool); color: #04121B }
+.seg button kbd { font-family: var(--data); font-size: .85em; opacity: .55; margin-left: .3em }
+.flip {
+  appearance: none; border: 1px solid var(--cool); background: transparent; color: var(--cool); border-radius: 2px;
+  font-family: var(--chrome); font-weight: 700; font-size: .64rem; letter-spacing: .1em; padding: .38rem .65rem; cursor: pointer;
+}
+.flip:hover { background: var(--cool); color: #04121B }
+.flip kbd { font-family: var(--data); opacity: .6 }
+.pick {
+  appearance: none; background: transparent; border: 1px solid var(--edge); border-radius: 2px;
+  color: var(--mute); font-family: var(--data); font-size: .6rem; padding: .38rem .5rem; cursor: pointer;
+}
+:is(.seg button, .pick, .flip, .hold, .blk, .note):focus-visible { outline: 2px solid var(--cool); outline-offset: 2px }
+
+/* ── stage ──────────────────────────────────── */
+.stage {
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 1.1rem; min-height: 0; overflow: hidden;
+  background: radial-gradient(ellipse 62% 58% at 50% 42%, #182430 0%, var(--room) 74%);
+}
+body[data-mode=note] .stage { justify-content: flex-start; overflow: hidden; gap: 1rem }
+.frame { position: relative; display: block; flex: 0 0 auto }
+.plate { position: relative; display: block; line-height: 0; box-shadow: 0 20px 56px -20px #000C }
+/* 陷阱:圖片尺寸由 JS 算好寫入 style.width,不用 max-width:100% —
+   在彈性容器裡會跟容器寬互相依賴,圖片會塌掉。 */
+.plate img { display: block; width: auto; height: auto }
+
+.acetate {
+  position: absolute; inset: 0; transform-origin: 50% 46%;
+  transition: opacity .22s, transform .3s cubic-bezier(.2, .8, .3, 1), filter .22s;
+}
+body.lifted .acetate { opacity: 0; transform: translateY(-1.6%) scale(1.03); filter: blur(4px) }
+
+.blk {
+  position: absolute; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  padding: calc(var(--u)*.22); font-family: var(--doc); text-align: center;
+  transition: transform .16s cubic-bezier(.2, .8, .3, 1);
+}
+.blk .veil {
+  position: absolute; inset: calc(var(--u)*-.18); border-radius: calc(var(--u)*.16);
+  backdrop-filter: blur(1.4px) saturate(.55) brightness(1.16);
+  -webkit-backdrop-filter: blur(1.4px) saturate(.55) brightness(1.16);
+  background: linear-gradient(160deg, rgba(206, 238, 255, calc(var(--veil)*.9)), rgba(228, 244, 255, calc(var(--veil)*.55)));
+  box-shadow: inset 0 0 0 1px rgba(65, 201, 255, .28); transition: box-shadow .16s, background .16s;
+}
+.blk .txt {
+  position: relative; line-height: 1.3; width: 100%; font-weight: 700; color: var(--hot); word-break: break-word;
+  text-shadow: 0 0 calc(var(--u)*.14) #FFF, 0 0 calc(var(--u)*.34) rgba(255, 255, 255, .9), 0 calc(var(--u)*.04) 0 rgba(255, 255, 255, .85);
+}
+.corner { position: absolute; width: calc(var(--u)*.85); height: calc(var(--u)*.85); opacity: .42; transition: opacity .16s; pointer-events: none }
+.corner i { position: absolute; background: var(--cool) }
+.corner i:first-child { inset: 0 auto auto 0; width: 100%; height: 1.5px }
+.corner i:last-child { inset: 0 auto auto 0; width: 1.5px; height: 100% }
+.c-tl { top: calc(var(--u)*-.18); left: calc(var(--u)*-.18) }
+.c-tr { top: calc(var(--u)*-.18); right: calc(var(--u)*-.18); transform: scaleX(-1) }
+.c-bl { bottom: calc(var(--u)*-.18); left: calc(var(--u)*-.18); transform: scaleY(-1) }
+.c-br { bottom: calc(var(--u)*-.18); right: calc(var(--u)*-.18); transform: scale(-1) }
+.blk:hover .veil { box-shadow: inset 0 0 0 1px rgba(65, 201, 255, .6) }
+.blk[aria-current=true] { transform: translateY(calc(var(--u)*-.14)) }
+.blk[aria-current=true] .veil {
+  box-shadow: inset 0 0 0 1.5px var(--hot), 0 calc(var(--u)*.16) calc(var(--u)*.5) rgba(255, 74, 20, .22);
+  background: linear-gradient(160deg, rgba(255, 236, 226, calc(var(--veil)*1.05)), rgba(255, 246, 240, calc(var(--veil)*.7)));
+}
+.blk[aria-current=true] .corner { opacity: 1 }
+.blk[aria-current=true] .corner i { background: var(--hot) }
+.blk[data-low=true] .veil { box-shadow: inset 0 0 0 1px rgba(255, 74, 20, .34) }
+.blk[data-low=true] .txt { color: var(--hot-deep) }
+
+/* 編號錨點 */
+.pin {
+  position: absolute; width: calc(var(--u)*1.6); height: calc(var(--u)*1.6); transform: translate(-50%, -50%);
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+}
+.pin::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--hot);
+  box-shadow: 0 0 0 calc(var(--u)*.14) rgba(255, 255, 255, .92), 0 calc(var(--u)*.06) calc(var(--u)*.4) rgba(0, 0, 0, .4);
+}
+.pin b {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--data); font-size: calc(var(--u)*.7); color: #fff; font-weight: 500; z-index: 1;
+}
+body[data-mode=note] .pin { opacity: 1 }
+body[data-mode=note] .pin[data-on=true] { transform: translate(-50%, -50%) scale(1.35) }
+body[data-mode=note] .blk :is(.veil, .txt), body[data-mode=note] .corner { opacity: 0 }
+
+/* ── 註解欄 ─────────────────────────────────── */
+.notepane { display: none; width: 100%; max-width: 64ch; flex: 1 1 auto; min-height: 0; flex-direction: column }
+body[data-mode=note] .notepane { display: flex }
+.noteshead {
+  flex: 0 0 auto; display: flex; align-items: center; gap: .8rem; flex-wrap: wrap;
+  padding-bottom: .5rem; border-bottom: 1px solid var(--edge);
+}
+.noteshead h2 { font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; color: var(--mute); font-weight: 600 }
+.filters { display: flex; gap: .3rem; margin-left: auto }
+.filters button {
+  appearance: none; background: transparent; border: 1px solid var(--edge); border-radius: 2px;
+  color: var(--mute); font-family: var(--chrome); font-weight: 600; font-size: .6rem; letter-spacing: .08em;
+  padding: .22rem .5rem; cursor: pointer; white-space: nowrap;
+}
+.filters button[aria-pressed=true] { border-color: var(--hot); color: var(--hot) }
+.notes {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column;
+  scrollbar-width: thin; scrollbar-color: var(--edge) transparent;
+}
+/* 陷阱:選取項用 order:-1 + sticky 頂到列首,不用 scrollIntoView(會跳動)。 */
+.note {
+  display: grid; grid-template-columns: 2.1rem 1fr; gap: .7rem; padding: .65rem .5rem; cursor: pointer;
+  border-bottom: 1px solid rgba(35, 50, 64, .6); transition: background .15s;
+}
+.note[aria-current=true] {
+  order: -1; position: sticky; top: 0; z-index: 1; background: #16232E;
+  box-shadow: 0 6px 18px -8px #000, inset 3px 0 0 var(--hot);
+}
+body[data-filter=nt] .note:not([data-nt=true]):not([aria-current=true]),
+body[data-filter=low] .note:not([data-low=true]):not([aria-current=true]) { display: none }
+.note:hover { background: rgba(255, 255, 255, .03) }
+.note .n { font-family: var(--data); font-size: .68rem; color: var(--hot); padding-top: .15rem; display: flex; align-items: flex-start; justify-content: center }
+.note[aria-current=true] .n { font-weight: 500 }
+.note .z { font-family: var(--doc); font-weight: 700; font-size: .92rem; color: #FF7A4A; line-height: 1.55 }
+.note .e { font-size: .72rem; color: var(--mute); line-height: 1.5; margin-top: .25rem }
+.note .nt {
+  font-family: var(--doc); font-size: .74rem; color: var(--cool); line-height: 1.6;
+  margin-top: .4rem; padding-left: .6rem; border-left: 2px solid rgba(65, 201, 255, .3);
+}
+.note .flag { font-family: var(--data); font-size: .58rem; color: var(--hot); margin-top: .3rem }
+
+body[data-mode=off] .acetate { opacity: 0; pointer-events: none }
+body[data-mode=dot] .blk :is(.veil, .txt), body[data-mode=dot] .corner { opacity: 0 }
+body[data-mode=dot] .blk::before {
+  content: ''; position: absolute; left: calc(var(--u)*.3); top: calc(var(--u)*.3);
+  width: calc(var(--u)*1); height: calc(var(--u)*1); border-radius: 50%; background: var(--hot);
+  box-shadow: 0 0 0 calc(var(--u)*.2) rgba(255, 255, 255, .92), 0 0 calc(var(--u)*.5) rgba(255, 74, 20, .7);
+}
+body[data-mode=dot] .blk[aria-current=true] :is(.veil, .txt),
+body[data-mode=dot] .blk[aria-current=true] .corner { opacity: 1; transition: opacity .18s }
+
+/* ── deck ───────────────────────────────────── */
+.deck { flex: 0 0 auto; border-top: 1px solid var(--edge); background: var(--panel); display: flex; min-height: 5.4rem }
+.hold {
+  appearance: none; flex: 0 0 auto; width: 10.5rem; border: 0; border-right: 1px solid var(--edge);
+  background: transparent; color: var(--pale); cursor: pointer; font-family: var(--chrome); font-weight: 700;
+  font-size: .76rem; letter-spacing: .14em; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: .3rem; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.hold small { font-family: var(--data); font-size: .54rem; letter-spacing: 0; color: var(--mute); font-weight: 400 }
+.hold:active, body.lifted .hold { background: var(--cool); color: #04121B }
+.insp { flex: 1 1 auto; padding: .7rem 1rem; display: flex; flex-direction: column; gap: .35rem; min-width: 0; overflow: auto }
+.row { display: flex; gap: .8rem; align-items: baseline; flex-wrap: wrap }
+.tag { font-family: var(--data); font-size: .54rem; color: var(--mute); flex: 0 0 3rem }
+.src { font-size: .76rem; color: var(--mute); line-height: 1.45; flex: 1 1 13rem; min-width: 0 }
+.tgt {
+  font-family: var(--doc); font-weight: 500; font-size: .86rem; color: var(--hot); line-height: 1.5;
+  flex: 1 1 13rem; min-width: 0; border: 1px dashed var(--edge); border-radius: 2px; padding: .22rem .4rem; outline: none;
+}
+.tgt:focus { border-color: var(--hot); border-style: solid }
+.meta { display: flex; gap: 1.1rem; font-family: var(--data); font-size: .56rem; color: var(--mute); flex-wrap: wrap }
+.meta b { color: var(--pale); font-weight: 400 }
+.conf i { display: inline-block; width: .36rem; height: .36rem; border-radius: 50%; background: var(--cool); margin-right: .3rem }
+.conf.low i { background: var(--hot) }
+.empty { color: var(--mute); font-size: .74rem }
+
+@media (max-width:700px) {
+  .deck { flex-direction: column }
+  .hold { width: 100%; border-right: 0; border-bottom: 1px solid var(--edge); padding: .7rem; flex-direction: row; gap: .6rem }
+  .dial { display: none }
+}
+@media (prefers-reduced-motion:reduce) {
+  * { transition-duration: .01s !important }
+  body.lifted .acetate { transform: none; filter: none }
+  .blk[aria-current=true] { transform: none }
+}

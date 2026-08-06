@@ -1,0 +1,18 @@
+/* 視覺 tokens(handoff §8)。
+   紀律:--hot 橘紅只給譯文,不做按鈕、標題、裝飾——
+   使用者要能一眼分辨「哪些字是 sukemu 加上去的」。 */
+:root {
+  --room: #0E1319;
+  --panel: #151C25;
+  --edge: #233240;
+  --pale: #B9C9D8;
+  --mute: #6C8296;
+  --cool: #41C9FF;      /* 品牌與 HUD,theme-color 用這支 */
+  --hot: #FF4A14;       /* 譯文專用 */
+  --hot-deep: #C82800;
+  --veil: .30;          /* 疊層強度 0–.60,滑桿可調 */
+  --chrome: 'IBM Plex Sans Condensed', system-ui, sans-serif;
+  --data: 'IBM Plex Mono', ui-monospace, monospace;
+  --doc: 'Noto Sans TC', system-ui, sans-serif;
+  --u: 7px;             /* 標註字級單位 = 圖片顯示寬度/100,由 JS 寫入 */
+}

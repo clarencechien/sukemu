@@ -1,0 +1,46 @@
+/* 登入頁:與 manemu 同構(wordmark+假名副標、命名文案、SSO、等候名單卡),
+   但用 sukemu 自己的深色青色系與直角語彙。 */
+.login {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+  padding: 48px 28px calc(28px + env(safe-area-inset-bottom));
+  max-width: 520px; margin: 0 auto; width: 100%;
+  background: radial-gradient(ellipse 70% 50% at 50% 30%, #182430 0%, var(--room) 78%);
+}
+.wordmark { font-size: 34px; font-weight: 700; letter-spacing: .04em; color: #fff }
+.wordmark .kana {
+  font-family: var(--doc); font-size: 15px; font-weight: 500;
+  color: var(--cool); margin-left: 10px; letter-spacing: .3em;
+}
+.login .tag { font-family: var(--doc); color: var(--mute); font-size: 14.5px; line-height: 1.85; margin: 14px 0 20px; text-wrap: balance }
+.login .tag b { color: var(--pale) }
+.login .tag .suke { color: var(--cool); font-weight: 700 }
+.login .tag .mu { color: var(--pale); font-weight: 700 }
+
+.privacy { list-style: none; margin: 0 0 22px; display: flex; flex-direction: column; gap: 7px }
+.privacy li {
+  font-family: var(--data); font-size: 11.5px; color: var(--mute); line-height: 1.6;
+  padding-left: 16px; position: relative;
+}
+.privacy li::before { content: '▸'; position: absolute; left: 0; color: var(--cool); opacity: .7 }
+
+.waitNotice {
+  background: rgba(65, 201, 255, .07); border: 1.5px solid var(--cool); border-radius: 2px;
+  padding: 14px 16px; margin: 0 0 18px; font-family: var(--doc);
+  font-size: 14.5px; line-height: 1.7; color: var(--pale);
+}
+.waitNotice b { display: block; font-size: 16px; color: var(--cool); margin-bottom: 4px }
+
+.sso {
+  border: none; background: var(--cool); color: #04121B; border-radius: 2px;
+  padding: 15px; width: 100%; font-size: 15px; font-weight: 700;
+  letter-spacing: .08em; cursor: pointer;
+}
+.sso:hover { filter: brightness(1.1) }
+.login .fine { font-family: var(--doc); font-size: 11.5px; color: var(--mute); line-height: 1.7; margin: 10px 0 0 }
+.demo {
+  margin-top: 26px; align-self: flex-start; background: transparent;
+  border: 1px solid var(--edge); border-radius: 2px; color: var(--mute);
+  font-weight: 600; font-size: .72rem; letter-spacing: .1em;
+  padding: .5rem .8rem; cursor: pointer;
+}
+.demo:hover { border-color: var(--cool); color: var(--cool) }
