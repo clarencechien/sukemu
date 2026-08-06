@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sukemu 名單管理</title>
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<style>
+  :root{
+    --room:#0E1319; --panel:#151C25; --edge:#233240;
+    --pale:#B9C9D8; --mute:#6C8296; --cool:#41C9FF; --hot-deep:#C82800;
+    --chrome:'IBM Plex Sans Condensed',system-ui,sans-serif;
+    --data:ui-monospace,monospace;
+    --doc:'Noto Sans TC',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box; margin:0}
+  body{
+    font-family:var(--doc); background:var(--room); color:var(--pale); line-height:1.6;
+    max-width:900px; margin:0 auto; padding:28px 20px 60px;
+  }
+  h1{font-family:var(--chrome); font-size:20px; letter-spacing:.1em; text-transform:uppercase; color:#fff}
+  h1 small{font-family:var(--data); font-size:11px; font-weight:400; color:var(--mute); margin-left:10px; letter-spacing:.05em; text-transform:none}
+  h2{font-family:var(--chrome); font-size:13px; letter-spacing:.12em; text-transform:uppercase; margin:32px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--edge); color:var(--pale)}
+  h2 .count{color:var(--mute); font-weight:400; font-size:12px; margin-left:6px}
+  table{width:100%; border-collapse:collapse; font-size:13.5px}
+  th,td{text-align:left; padding:8px 6px; border-bottom:1px solid var(--edge); vertical-align:middle}
+  th{font-size:10.5px; letter-spacing:.1em; color:var(--mute); font-weight:600; font-family:var(--chrome); text-transform:uppercase}
+  td.email{word-break:break-all}
+  .tier{display:inline-block; font-size:11px; padding:2px 8px; border-radius:2px; background:#1B2733; color:var(--mute); border:1px solid var(--edge)}
+  .tier.admin{border-color:var(--cool); color:var(--cool)}
+  .tier.custom{border-color:#3d5a43; color:#7FC79A}
+  .ts{font-size:11.5px; color:var(--mute); font-variant-numeric:tabular-nums; font-family:var(--data)}
+  input,select,button{font:inherit; font-size:13.5px}
+  input[type=email],input[type=text],select{
+    padding:8px 10px; border:1px solid var(--edge); border-radius:2px; background:var(--panel); color:var(--pale);
+  }
+  input[type=email]{min-width:230px}
+  input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--cool); outline-offset:2px}
+  button{padding:8px 13px; border-radius:2px; border:1px solid var(--edge); background:var(--panel); color:var(--pale); cursor:pointer}
+  button.primary{background:var(--cool); color:#04121B; border-color:var(--cool); font-weight:700}
+  button.danger{color:var(--hot-deep); border-color:var(--hot-deep); background:transparent}
+  button:hover{filter:brightness(1.12)}
+  form.add{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:14px 0 4px}
+  .hint{font-size:12px; color:var(--mute); margin-top:6px}
+  .empty{font-size:13px; color:var(--mute); padding:14px 6px}
+  #toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background:var(--cool); color:#04121B; padding:10px 16px; border-radius:2px; font-size:13px; font-weight:700;
+    opacity:0; transition:opacity .2s; pointer-events:none; max-width:90vw;
+  }
+  #toast.show{opacity:1}
+  .gate{padding:40px 0; font-size:15px}
+  .gate a{color:var(--cool)}
+  .row-actions{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+  .twd{color:var(--cool)}
+</style>
+</head>
+<body>
+<div id="gate" class="gate">載入中…</div>
+
+<div id="main" hidden>
+  <h1>sukemu 名單管理<small id="whoami"></small></h1>
+
+  <h2>等候名單<span class="count" id="waitCount"></span></h2>
+  <div id="waitBox"></div>
+
+  <h2>已核准名單<span class="count" id="allowCount"></span></h2>
+  <form class="add" id="addForm">
+    <input type="email" id="addEmail" placeholder="email@example.com" required>
+    <select id="addTier"></select>
+    <input type="text" id="addCustom" placeholder="或自訂張數/日" size="10" inputmode="numeric">
+    <button class="primary" type="submit">加入名單</button>
+  </form>
+  <p class="hint" id="tierHint"></p>
+  <div id="allowBox"></div>
+
+  <p class="hint" style="margin-top:28px">
+    名單存 R2 <code>config/allowlist.json</code>,改動立即生效(免重部署、免重登入)。
+    「今日」欄位為已用張數與估算成本(NT$,依 <code>PRICE_*</code> / <code>USD_TWD</code> vars 計),台灣時間早上 8 點重置。
+  </p>
+</div>
+
+<div id="toast"></div>
+
+<script src="/admin.js"></script>
+</body>
+</html>

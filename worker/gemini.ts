@@ -65,13 +65,15 @@ export const P2_PROMPT = `你是台灣在地化編輯。輸入是一張圖片的
 
 只回傳「zh 有修改」或「有 nt」的塊;完全不需要動的塊不要回傳。`;
 
+export type TokenUsage = { inTok: number; outTok: number };
+
 async function generateJSON(
   env: Env,
   model: string,
   parts: Part[],
   schema: object,
   highRes: boolean,
-): Promise<unknown> {
+): Promise<{ data: unknown; usage: TokenUsage }> {
   if (!env.GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY 未設定:wrangler secret put GEMINI_API_KEY');
   }
@@ -98,22 +100,38 @@ async function generateJSON(
 
   const data = (await res.json()) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
   };
   const text = data.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? '';
-  return JSON.parse(text);
+  const um = data.usageMetadata ?? {};
+  // thinking token 依輸出價計費,併入 outTok
+  const usage: TokenUsage = {
+    inTok: um.promptTokenCount ?? 0,
+    outTok: (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0),
+  };
+  return { data: JSON.parse(text), usage };
+}
+
+/** token 用量 → 估算成本 TWD(單價與匯率在 vars,見 docs/oidc-setup.md「價格」) */
+export function estCostTwd(env: Env, usage: TokenUsage): number {
+  const pin = Number(env.PRICE_IN_USD_PER_M || 0.3);
+  const pout = Number(env.PRICE_OUT_USD_PER_M || 2.5);
+  const rate = Number(env.USD_TWD || 31.5);
+  return +(((usage.inTok * pin + usage.outTok * pout) / 1e6) * rate).toFixed(4);
 }
 
 const clampPct = (n: unknown) => Math.min(100, Math.max(0, Number(n) || 0));
 
 export async function runP1(env: Env, image: string, mime: string) {
   const model = env.GEMINI_MODEL || 'gemini-3.5-flash';
-  const out = (await generateJSON(
+  const { data, usage } = await generateJSON(
     env,
     model,
     [{ inline_data: { mime_type: mime, data: image } }, { text: P1_PROMPT }],
     P1_SCHEMA,
     true,
-  )) as { lang?: string; blocks?: Record<string, unknown>[] };
+  );
+  const out = data as { lang?: string; blocks?: Record<string, unknown>[] };
 
   const blocks = (out.blocks ?? []).map(b => ({
     x: clampPct(b.x),
@@ -126,7 +144,7 @@ export async function runP1(env: Env, image: string, mime: string) {
     zh: String(b.zh ?? ''),
     ...(b.v === true ? { v: true } : {}),
   }));
-  return { lang: String(out.lang ?? '??').toUpperCase(), blocks };
+  return { lang: String(out.lang ?? '??').toUpperCase(), blocks, usage };
 }
 
 export async function runP2(env: Env, lang: string, blocks: { en: string; zh: string }[]) {
@@ -135,19 +153,15 @@ export async function runP2(env: Env, lang: string, blocks: { en: string; zh: st
     lang,
     blocks: blocks.map((b, i) => ({ i, en: b.en, zh: b.zh })),
   });
-  const out = (await generateJSON(
-    env,
-    model,
-    [{ text: `${P2_PROMPT}\n\n${input}` }],
-    P2_SCHEMA,
-    false,
-  )) as { blocks?: { i?: unknown; zh?: unknown; nt?: unknown }[] };
+  const { data, usage } = await generateJSON(env, model, [{ text: `${P2_PROMPT}\n\n${input}` }], P2_SCHEMA, false);
+  const out = data as { blocks?: { i?: unknown; zh?: unknown; nt?: unknown }[] };
 
-  return (out.blocks ?? [])
+  const edits = (out.blocks ?? [])
     .filter(e => Number.isInteger(Number(e.i)))
     .map(e => ({
       i: Number(e.i),
       ...(typeof e.zh === 'string' && e.zh ? { zh: e.zh } : {}),
       ...(typeof e.nt === 'string' && e.nt ? { nt: e.nt } : {}),
     }));
+  return { edits, usage };
 }

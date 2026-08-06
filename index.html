@@ -37,8 +37,9 @@
     <b>🕓 已排上等候名單</b>
     <span>這個 Email 還不在受邀名單內,已自動幫你登記。<br>開通後,再登入一次就能使用。</span>
   </div>
-  <!-- M1 寫死版:Email 比對白名單。M4 換回 Google 登入(與 manemu 同機制) -->
+  <!-- 模式由 /api/config 決定:OIDC(POST /auth/login → Google)或開發用 Email 直登 -->
   <form id="ssoForm">
+    <div id="tsWidget" style="margin-bottom:12px"></div>
     <input class="mail" id="email" type="email" required placeholder="you@example.com" autocomplete="email" aria-label="Email">
     <button class="sso" id="ssoBtn" type="submit">登入</button>
   </form>
@@ -54,7 +55,9 @@
   <div class="bar">
     <div class="mark"><b>sukemu</b><span>すけむ v0.3</span></div>
     <div class="langs" id="langs">EN → <b>正體中文</b></div>
+    <span class="usage" id="usage"></span>
     <div class="spacer"></div>
+    <button class="pick hidden" id="adminBtn">管理</button>
     <label class="dial">縮放<input type="range" id="zoom" min="55" max="200" value="100" aria-label="圖片縮放"><b id="zoomv">100%</b></label>
     <label class="dial">強度<input type="range" id="veil" min="0" max="60" value="30" aria-label="疊層強度"><b id="veilv">.30</b></label>
     <button class="shoot" id="shoot">📷 拍照 / 上傳</button>

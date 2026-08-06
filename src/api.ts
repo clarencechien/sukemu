@@ -2,6 +2,15 @@ import type { Block, Result } from './types';
 
 /** P2 修訂:i 為 blocks 索引 */
 export type P2Edit = { i: number; zh?: string; nt?: string };
+export type ApiUsage = { inTok: number; outTok: number; twd: number };
+export type Me = {
+  email: string;
+  tier: string;
+  isAdmin: boolean;
+  usedImages: number;
+  limitImages: number;
+  todayTwd: number;
+};
 
 export class ApiError extends Error {
   constructor(
@@ -30,11 +39,12 @@ const post = (path: string, body: unknown) =>
   });
 
 export const api = {
-  me: (): Promise<{ email: string }> => req('/api/me'),
+  config: (): Promise<{ mode: 'oidc' | 'dev'; turnstileSiteKey: string | null }> => req('/api/config'),
+  me: (): Promise<Me> => req('/api/me'),
   login: (email: string): Promise<{ email: string }> => post('/api/login', { email }),
   logout: (): Promise<void> => post('/api/logout', {}),
-  p1: (image: string, mime: string, name: string): Promise<Result> =>
-    post('/api/p1', { image, mime, name }).then(d => d.result),
-  p2: (lang: string, blocks: Block[]): Promise<P2Edit[]> =>
-    post('/api/p2', { lang, blocks: blocks.map(({ en, zh }) => ({ en, zh })) }).then(d => d.edits),
+  p1: (image: string, mime: string, name: string): Promise<{ result: Result; usage?: ApiUsage }> =>
+    post('/api/p1', { image, mime, name }),
+  p2: (lang: string, blocks: Block[]): Promise<{ edits: P2Edit[]; usage?: ApiUsage }> =>
+    post('/api/p2', { lang, blocks: blocks.map(({ en, zh }) => ({ en, zh })) }),
 };
