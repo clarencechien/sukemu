@@ -140,7 +140,7 @@ const DEFAULT_PRICES: Record<string, [number, number]> = {
   'gemini-3.1-pro-preview': [2.0, 12.0],
 };
 
-/** token 用量 → 估算成本 TWD(見 docs/oidc-setup.md §6) */
+/** token 用量 → 估算成本 TWD(見 docs/config.md「價格」) */
 export function estCostTwd(env: Env, model: string, usage: TokenUsage): number {
   let table = DEFAULT_PRICES;
   try {

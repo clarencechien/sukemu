@@ -4,7 +4,13 @@
 
 **透ける**(sukeru,穿透、透明)+ mu。與 [manemu](https://manemu.ai-apps.work/) 同一個命名家族與產品家族(manemu 是紅,sukemu 是青)。
 
-規格見 [`docs/handoff.md`](docs/handoff.md);互動原型(規格書)見 [`docs/mockup/acetate-lens.html`](docs/mockup/acetate-lens.html);**OIDC/配額/價格設定見 [`docs/oidc-setup.md`](docs/oidc-setup.md)**;架構決策紀錄見 [`docs/adr/`](docs/adr/)。
+| 文件 | 內容 |
+|---|---|
+| [`docs/handoff.md`](docs/handoff.md) | 產品規格與決策(來源文件) |
+| [`docs/mockup/acetate-lens.html`](docs/mockup/acetate-lens.html) | 互動原型 = 互動與視覺的規格書 |
+| [`docs/oidc-setup.md`](docs/oidc-setup.md) | 一次性部署設定(OAuth、secrets、網域與安全) |
+| [`docs/config.md`](docs/config.md) | 平常在調的旋鈕:名單、配額、模型檔位、價格 |
+| [`docs/adr/`](docs/adr/) | 架構決策紀錄 |
 
 ## 部署(Cloudflare Workers)
 
@@ -24,7 +30,7 @@ npm run deploy                                # build + wrangler deploy
 
 - **Google OIDC** 全 server-side(authorization code + JWKS 驗 id_token),HMAC 簽章 session cookie(7 天)
 - **白名單** R2 `config/allowlist.json`,支援 `["a@x.com"]` 或 `{"a@x.com":"pro","b@x.com":100}`(級別名或每日張數),**改檔即生效**;不在名單的登入自動記入等候名單
-- **管理頁 `/admin`**(僅 `ADMIN_EMAILS`):等候名單一鍵核准、改額度、看每人今日用量與估算成本
+- **管理頁 `/admin`**(僅 `ADMIN_EMAILS`):等候名單一鍵核准、改額度、看每人今日用量與估算成本(操作見 [`docs/config.md`](docs/config.md))
 - **配額**:每人一個 Durable Object 計「每日張數」,分級在 var `QUOTA_TIERS`(`{"admin":0,"pro":200,"beta":30,"trial":5}`,0 = 無上限),台灣時間早上 8 點重置;P1 成功才扣,失敗不計
 
 ## 模型檔位與價格(TWD)
@@ -38,7 +44,7 @@ npm run deploy                                # build + wrangler deploy
 
 全域切換改 `DEFAULT_MODE`;App 頂列也有檔位鈕,單張可切精準重翻(切換後同一張圖不吃舊快取)。
 
-Worker 用 Gemini 回傳的實際 token 數即時估算:翻完提示「本次約 NT$X」、`/admin` 看每人當日累計。單價表按模型內建,**換模型自動換價**(可用 var `MODEL_PRICES` 覆寫)。**P1 佔 80–92% 的成本,其中八成以上是輸出+thinking**,影像輸入不到一成。換檔位前先用 `scripts/ab-models.mjs` 跑同一張圖比框準度與成本。細節見 [`docs/oidc-setup.md`](docs/oidc-setup.md) §6。
+Worker 用 Gemini 回傳的實際 token 數即時估算:翻完提示「本次約 NT$X」、`/admin` 看每人當日累計。單價表按模型內建,**換模型自動換價**(可用 var `MODEL_PRICES` 覆寫)。**P1 佔 80–92% 的成本,其中八成以上是輸出+thinking**,影像輸入不到一成。換檔位前先用 `scripts/ab-models.mjs` 跑同一張圖比框準度與成本。細節見 [`docs/config.md`](docs/config.md)。
 
 ## 本機開發
 
@@ -60,6 +66,7 @@ npm run dev          # vite dev server,/api 代理到 8787
 - **資料契約** `src/types.ts`(`Block` / `Result`),欄位名前後端共用,不可改;座標一律正規化百分比;`v?: boolean` 標直排文字(前端以 `writing-mode: vertical-rl` 呈現)
 - **結果保存** `src/db.ts` 裝置端 IndexedDB(§9:譯文不落地伺服器):每筆存壓縮影像 + 縮圖 + blocks + 影像 hash。上傳前先以 hash 查紀錄,**同一張圖翻過就直接開啟、不重打 API**;「紀錄」面板可瀏覽、重開、刪除;譯文編輯自動回存
 - **PWA**(M5)`public/manifest.json` + `public/sw.js`(離線殼:導覽網路優先、雜湊資產快取優先、`/api/` 不快取)+ `public/icons/`;安裝後 standalone 隱藏網址列。登入頁有安裝按鈕(Android/桌面)與 iOS 加入主畫面指引
+- **縮放** 桌面用滑桿或雙擊;手機/PWA 三種入口都有:滑桿(緊湊版)、雙指捏合、雙擊,上限 300%,放大後單指平移
 
 ## 視覺紀律
 
