@@ -6,8 +6,12 @@
 <title>sukemu すけむ</title>
 <meta name="description" content="拍一張照,sukemu 把外文翻成台灣正體中文,用一層透明標註疊回原圖上。">
 <meta name="theme-color" content="#41C9FF">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="sukemu">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -39,6 +43,8 @@
     <button class="sso" id="ssoBtn" type="submit">登入</button>
   </form>
   <p class="loginErr hidden" id="loginErr"></p>
+  <button class="install hidden" id="installBtn">📲 安裝成 App(免商店・全螢幕無網址列)</button>
+  <p class="fine hidden" id="iosHint">iPhone / iPad:用 Safari 開啟 → 分享 → 「加入主畫面」,即可全螢幕使用。</p>
   <p class="fine">封測中:Email 需在受邀名單內才能啟用翻譯。</p>
   <button class="demo" id="demoBtn">先看示範 →</button>
 </div>
@@ -46,10 +52,10 @@
 <!-- ── App(原型移植)──────────────────────── -->
 <div class="app" id="appScreen">
   <div class="bar">
-    <div class="mark"><b>sukemu</b><span>すけむ v0.1</span></div>
+    <div class="mark"><b>sukemu</b><span>すけむ v0.2</span></div>
     <div class="langs" id="langs">EN → <b>正體中文</b></div>
     <div class="spacer"></div>
-    <label class="dial">縮放<input type="range" id="zoom" min="55" max="130" value="100" aria-label="圖片縮放"><b id="zoomv">100%</b></label>
+    <label class="dial">縮放<input type="range" id="zoom" min="55" max="200" value="100" aria-label="圖片縮放"><b id="zoomv">100%</b></label>
     <label class="dial">強度<input type="range" id="veil" min="0" max="60" value="30" aria-label="疊層強度"><b id="veilv">.30</b></label>
     <button class="shoot" id="shoot">📷 拍照 / 上傳</button>
     <input type="file" id="file" accept="image/*" class="hidden">

@@ -5,6 +5,8 @@ import './styles/viewer.css';
 import { initLogin } from './ui/login';
 import { initViewer } from './ui/viewer';
 import { initCapture } from './ui/capture';
+import { initPwa } from './ui/pwa';
 
 initLogin();
 initCapture(initViewer());
+initPwa();

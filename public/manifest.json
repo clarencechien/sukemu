@@ -1,0 +1,17 @@
+{
+  "name": "sukemu すけむ",
+  "short_name": "sukemu",
+  "description": "拍一張照,sukemu 把外文翻成台灣正體中文,用一層透明標註疊回原圖上。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0E1319",
+  "theme_color": "#41C9FF",
+  "lang": "zh-Hant",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
