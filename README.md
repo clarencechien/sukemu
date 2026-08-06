@@ -8,6 +8,7 @@
 |---|---|
 | [`docs/handoff.md`](docs/handoff.md) | 產品規格與決策(來源文件) |
 | [`docs/mockup/acetate-lens.html`](docs/mockup/acetate-lens.html) | 互動原型 = 互動與視覺的規格書 |
+| [`docs/oidc-setup.md`](docs/oidc-setup.md) | 一次性部署設定(OAuth、secrets、網域與安全、疑難排解) |
 | [`docs/oidc-setup.md`](docs/oidc-setup.md) | 一次性部署設定(OAuth、secrets、網域與安全) |
 | [`docs/cf-security-baseline.md`](docs/cf-security-baseline.md) | **安全基線**:新專案從這開始;控制清單、正式/demo 標準、audit 紀錄 |
 | [`docs/config.md`](docs/config.md) | 平常在調的旋鈕:名單、配額、模型檔位、價格 |
@@ -27,12 +28,17 @@ npm run deploy                                # build + wrangler deploy
 
 沒設 `GOOGLE_CLIENT_ID` 時自動退回**開發用 Email 直登**(比對白名單、不經 Google)——本機開發與初次部署跑通用;設好後登入頁自動變成「使用 Google 登入」。
 
+**Turnstile 是選用的,但要設就得成對**(`TURNSTILE_SITE_KEY` var + `TURNSTILE_SECRET` secret)。只設一邊時 Worker 會自動停用挑戰並留 log 警告——因為前端渲染不出元件、後端卻要求 token,會讓登入 100% 失敗。詳見 [`docs/oidc-setup.md`](docs/oidc-setup.md) 的疑難排解。
+
+`workers.dev` 與 preview URL 在 `wrangler.jsonc` 已關閉(`workers_dev: false` / `preview_urls: false`)——這兩種網址不經 zone,WAF 與 Rate Limiting 全繞過。對外一律走自訂網域。
+
 ## 認證・名單・配額(與 manemu 同機制)
 
 - **Google OIDC** 全 server-side(authorization code + JWKS 驗 id_token),HMAC 簽章 session cookie(7 天)
 - **白名單** R2 `config/allowlist.json`,支援 `["a@x.com"]` 或 `{"a@x.com":"pro","b@x.com":100}`(級別名或每日張數),**改檔即生效**;不在名單的登入自動記入等候名單
 - **管理頁 `/admin`**(僅 `ADMIN_EMAILS`):等候名單一鍵核准、改額度、看每人今日用量與估算成本(操作見 [`docs/config.md`](docs/config.md))
 - **配額**:每人一個 Durable Object 計「每日張數」,分級在 var `QUOTA_TIERS`(`{"admin":0,"pro":200,"beta":30,"trial":5}`,0 = 無上限),台灣時間早上 8 點重置;P1 成功才扣,失敗不計
+- **未登入**只能看介面(登入頁的「看看介面 →」):所有 `/api/*` 一律 401,偽造 session cookie 過不了 HMAC;前端也不會假裝可用——按拍照直接提示登入,不開檔案選擇器
 
 ## 模型檔位與價格(TWD)
 
@@ -48,11 +54,19 @@ Worker 用 Gemini 回傳的實際 token 數即時估算:翻完提示「本次約
 ## 本機開發
 
 ```bash
-npm run dev:worker   # wrangler dev(API + 本機模擬 R2/DO),port 8787;dev 模式 Email 直登
+npm run dev:worker   # wrangler dev(API + 本機模擬 R2/DO),port 8787
 npm run dev          # vite dev server,/api 代理到 8787
+npm run build        # tsc(前端 + worker)+ vite build
 ```
 
-真的打 Gemini 需要 `.dev.vars`(不進版控):`GEMINI_API_KEY=...`
+要真的打 Gemini 就建 `.dev.vars`(不進版控):`GEMINI_API_KEY=...`。
+不設 `GOOGLE_CLIENT_ID` 時本機走 Email 直登,方便開發。
+
+模型 A/B(需要真 key):
+
+```bash
+GEMINI_API_KEY=xxx node scripts/ab-models.mjs 照片.jpg
+```
 
 ## 架構
 
@@ -63,16 +77,31 @@ npm run dev          # vite dev server,/api 代理到 8787
   - `admin.ts` — `/api/admin/*`:名單與額度管理(session + admin 雙閘門)
   - `gemini.ts` — `POST /api/p1` 視覺趟(REST `generateContent`、media_resolution HIGH、結構化輸出);`POST /api/p2` 文字趟(只餵 JSON,在地化+譯註,重試不重付影像 token)
 - **資料契約** `src/types.ts`(`Block` / `Result`),欄位名前後端共用,不可改;座標一律正規化百分比;`v?: boolean` 標直排文字(前端以 `writing-mode: vertical-rl` 呈現)
-- **結果保存** `src/db.ts` 裝置端 IndexedDB(§9:譯文不落地伺服器):每筆存壓縮影像 + 縮圖 + blocks + 影像 hash。上傳前先以 hash 查紀錄,**同一張圖翻過就直接開啟、不重打 API**;「紀錄」面板可瀏覽、重開、刪除;譯文編輯自動回存
+- **座標防呆** 模型常不照 prompt 回 0–100 百分比(lite 檔尤其會掉回 0–1000 的訓練慣例)。`normalizeBlocks()` 從數值範圍推回原始規格(0–1000 / 像素 / 0–1 小數)再換算,並用外框幾何夾住 `fs`——橫排字高 ≤ 框高、直排字寬 ≤ 框寬
+- **結果保存** `src/db.ts` 裝置端 IndexedDB(§9:譯文不落地伺服器):每筆存壓縮影像 + 縮圖 + blocks + 影像 hash。上傳前先以「hash + 檔位」查紀錄,**同一張圖同一檔位翻過就直接開啟、不重打 API**;「紀錄」面板可瀏覽、重開、刪除;譯文編輯自動回存
 - **PWA**(M5)`public/manifest.json` + `public/sw.js`(離線殼:導覽網路優先、雜湊資產快取優先、`/api/` 不快取)+ `public/icons/`;安裝後 standalone 隱藏網址列。登入頁有安裝按鈕(Android/桌面)與 iOS 加入主畫面指引
+- **無內建示範圖** 空狀態是純 CSS 的 ghost 佔位(虛線板 + 淡色假菜單 + 兩塊疊字示意),零資產、零請求,且會跟著視覺語彙一起變
+
+## 前端互動(原型即規格)
+
+- **A 疊字 / C 註解 / 標點 / 隱藏** 四個模式;C 註解的選取項用 `order:-1` + `sticky` 頂到列首,**不用 `scrollIntoView`**(會造成畫面跳動)
+- **按住看原圖** 三種入口:按鈕、長按圖片、按住 `O` 鍵
 - **縮放** 桌面用滑桿或雙擊;手機/PWA 三種入口都有:滑桿(緊湊版)、雙指捏合、雙擊,上限 300%,放大後單指平移
+- **譯文允許溢出**毛玻璃底——中譯常比原文長,裁掉就讀不到;可讀性靠白色光暈,深淺背景都成立
+- 圖片尺寸由 JS 算好寫入 `style.width`,**不用 `max-width:100%`**(在彈性容器裡會與容器寬互相依賴,圖片會塌掉)
 
 ## 視覺紀律
 
 橘紅(`--hot`)只給譯文,不做按鈕、標題、裝飾——使用者要能一眼分辨「哪些字是 sukemu 加上去的」。品牌與 HUD 用青(`--cool`)。
 
-## 尚未做(依 handoff 里程碑)
+## 進度
 
+M1 靜態骨架 → M2 上傳與 P1 → M3 P2 與譯註 → M4 認證與配額 → M5 PWA **已完成**。
+
+尚未做:
+
+- **§12 框準度 IoU 驗收**(十張真實照片人工標註)——最重要的一項,目前只做過模型 A/B 的目視對照
+- 精準模式單張約 17 秒,超出 §12 的 10 秒目標(§3 品質優先,先吃下;優化方向是縮短 P1 輸出與 thinking 預算,那也同時省錢)
 - OpenCC `cn→twp` 收尾(目前靠 P2 prompt 保證台灣正體)
+- M6 分塊高解析與 Meta 注入(GPS、session 詞彙累積)、直排的透視變形 quad(§11)
 - R2 影像暫存生命週期(目前影像不落地,直接 inline 給 Gemini,天然符合「完成即刪」)
-- 分塊高解析與 Meta 注入(M6)、直排的透視變形 quad(§11)
