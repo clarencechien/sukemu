@@ -1,5 +1,5 @@
 {
-  // 一次性部署步驟(R2 bucket、Google OAuth、secrets)見 docs/oidc-setup.md
+  // 一次性部署步驟見 docs/oidc-setup.md;下方各項設定的說明見 docs/config.md
   "name": "sukemu",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-01",

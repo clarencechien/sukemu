@@ -77,7 +77,8 @@ body:not([data-mode=note]) .frame { margin: auto }
 .progress[data-err=true] i { background: var(--hot-deep); animation: none }
 @keyframes pulse { 50% { opacity: .25 } }
 body[data-mode=note] .stage { justify-content: flex-start; overflow: hidden; gap: 1rem }
-.frame { position: relative; display: block; flex: 0 0 auto }
+/* pan-x pan-y:單指維持原生捲動(放大後平移),雙指縮放由 JS 接管(見 viewer.ts) */
+.frame { position: relative; display: block; flex: 0 0 auto; touch-action: pan-x pan-y }
 .plate { position: relative; display: block; line-height: 0; box-shadow: 0 20px 56px -20px #000C }
 /* 陷阱:圖片尺寸由 JS 算好寫入 style.width,不用 max-width:100% —
    在彈性容器裡會跟容器寬互相依賴,圖片會塌掉。 */
@@ -283,17 +284,26 @@ body[data-mode=dot] .blk[aria-current=true] .corner { opacity: 1; transition: op
 @media (max-width:700px) {
   .deck { flex-direction: column }
   .hold { width: 100%; border-right: 0; border-bottom: 1px solid var(--edge); padding: .7rem; flex-direction: row; gap: .6rem }
-  .dial { display: none }
   /* 觸控目標放大 */
-  .seg button, .pick, .flip, .shoot { padding-top: .5rem; padding-bottom: .5rem }
+  .seg button, .pick, .flip, .shoot, .mode { padding-top: .5rem; padding-bottom: .5rem }
   .stage { padding: .6rem }
+  /* 滑桿在手機上留著(縮放與疊層強度都是規格內的控制項),改成緊湊版;
+     鍵盤提示與副標在觸控裝置沒用,收掉換空間給滑桿 */
+  .dial { font-size: .52rem; gap: .3rem }
+  .dial input { width: 4.2rem }
+  .dial b { min-width: 1.9rem }
+  .seg button kbd, .flip kbd { display: none }
+  .mark span { display: none }
+  /* A ⇄ C 是鍵盤(X)的捷徑,觸控上與分段鈕重複——收掉,省一整排 */
+  .flip { display: none }
 }
 
 /* 短螢幕(橫向手機):壓縮 chrome,把高度留給圖 */
 @media (max-height:560px) {
   .bar { padding-top: calc(.35rem + env(safe-area-inset-top)); padding-bottom: .35rem; gap: .55rem; row-gap: .25rem }
   .mark span { display: none }
-  .dial { display: none }
+  .dial { font-size: .5rem; gap: .25rem }
+  .dial input { width: 3.4rem }
   .stage { padding: .55rem }
   .deck { min-height: 3.4rem }
   .hold { width: 8rem; font-size: .66rem; letter-spacing: .08em }

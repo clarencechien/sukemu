@@ -34,6 +34,8 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
   let noteEls: HTMLElement[] = [];
   let pins: HTMLElement[] = [];
   let zoom = 1;
+  /** 長按看原圖的計時器;捏合縮放要能取消它,所以宣告在共用範圍 */
+  let holdTimer: ReturnType<typeof setTimeout>;
 
   const mode = () => (document.body.dataset.mode ?? 'overlay') as Mode;
   const inApp = () => document.body.dataset.screen === 'app';
@@ -195,16 +197,51 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
   };
   zoomEl.oninput = () => setZoom(Number(zoomEl.value) / 100);
 
-  // 手機:雙擊(雙點)圖片在 100% ↔ 200% 之間切換,放大後 stage 可捲動
+  /* 觸控縮放:雙指捏合 + 雙擊(桌面另有滑桿與同一組上下限)。
+     .frame 的 touch-action 設 pan-x pan-y——單指維持瀏覽器原生捲動 stage(放大後平移用),
+     雙指的預設縮放則交給這裡接管。放大後 stage 可捲動,見 body:not([data-mode=note]) .stage。 */
   const frame = $('frame');
+  const zMin = Number(zoomEl.min) / 100;
+  const zMax = Number(zoomEl.max) / 100;
+  const clampZoom = (z: number) => Math.min(zMax, Math.max(zMin, z));
+  const touches = new Map<number, { x: number; y: number }>();
+  let pinch: { dist: number; zoom: number } | null = null;
+  let pinchEndedAt = 0;
   let lastTap = 0;
   let tapX = 0;
   let tapY = 0;
+  const spread = () => {
+    const [a, b] = [...touches.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+
   frame.addEventListener('pointerdown', e => {
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     tapX = e.clientX;
     tapY = e.clientY;
+    if (touches.size === 2) {
+      pinch = { dist: spread(), zoom };
+      clearTimeout(holdTimer); // 雙指是縮放,不是長按看原圖
+    }
   });
+  frame.addEventListener('pointermove', e => {
+    if (!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && touches.size === 2 && pinch.dist > 0) {
+      setZoom(clampZoom(pinch.zoom * (spread() / pinch.dist)));
+    }
+  });
+  (['pointerup', 'pointercancel'] as const).forEach(t =>
+    frame.addEventListener(t, e => {
+      touches.delete(e.pointerId);
+      if (pinch && touches.size < 2) {
+        pinch = null;
+        pinchEndedAt = Date.now(); // 捏合收尾的抬指不該被當成點擊
+      }
+    }),
+  );
   frame.addEventListener('pointerup', e => {
+    if (touches.size || Date.now() - pinchEndedAt < 400) return;
     if (Math.hypot(e.clientX - tapX, e.clientY - tapY) > 10) return;
     const now = Date.now();
     if (now - lastTap < 300) {
@@ -248,12 +285,14 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
   addEventListener('keyup', e => {
     if (e.key === 'o' || e.key === 'O') lift(false);
   });
-  let holdTimer: ReturnType<typeof setTimeout>;
   let holdX = 0;
   let holdY = 0;
   acetate.addEventListener('pointerdown', e => {
     holdX = e.clientX;
     holdY = e.clientY;
+    // 先清掉前一根手指的計時器再重設:否則第二指只是覆寫了變數,
+    // 第一指的計時器成為孤兒繼續跑,捏合縮放到一半會誤觸「看原圖」
+    clearTimeout(holdTimer);
     holdTimer = setTimeout(() => lift(true), 450);
   });
   // 手指移動(捲動)就取消長按,避免捲動時誤觸「看原圖」
