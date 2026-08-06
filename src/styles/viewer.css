@@ -33,14 +33,33 @@
   appearance: none; background: transparent; border: 1px solid var(--edge); border-radius: 2px;
   color: var(--mute); font-family: var(--data); font-size: .6rem; padding: .38rem .5rem; cursor: pointer;
 }
+.shoot {
+  appearance: none; border: 1px solid var(--cool); background: transparent; color: var(--cool); border-radius: 2px;
+  font-family: var(--chrome); font-weight: 700; font-size: .64rem; letter-spacing: .1em; padding: .38rem .65rem; cursor: pointer;
+}
+.shoot:hover { background: var(--cool); color: #04121B }
 :is(.seg button, .pick, .flip, .hold, .blk, .note):focus-visible { outline: 2px solid var(--cool); outline-offset: 2px }
 
 /* ── stage ──────────────────────────────────── */
 .stage {
+  position: relative;
   flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 1.1rem; min-height: 0; overflow: hidden;
   background: radial-gradient(ellipse 62% 58% at 50% 42%, #182430 0%, var(--room) 74%);
 }
+
+/* 處理進度:上傳中 → 讀取版面・翻譯 → 在地化(不要只轉圈) */
+.progress {
+  position: absolute; top: .8rem; left: 50%; transform: translateX(-50%); z-index: 5;
+  display: flex; align-items: center; gap: .5rem;
+  background: var(--panel); border: 1px solid var(--cool); border-radius: 2px;
+  padding: .45rem .8rem; font-family: var(--data); font-size: .64rem; color: var(--cool);
+  max-width: min(90%, 34rem);
+}
+.progress i { flex: 0 0 auto; width: .5rem; height: .5rem; border-radius: 50%; background: var(--cool); animation: pulse 1s infinite }
+.progress[data-err=true] { color: var(--hot-deep); border-color: var(--hot-deep); font-family: var(--doc) }
+.progress[data-err=true] i { background: var(--hot-deep); animation: none }
+@keyframes pulse { 50% { opacity: .25 } }
 body[data-mode=note] .stage { justify-content: flex-start; overflow: hidden; gap: 1rem }
 .frame { position: relative; display: block; flex: 0 0 auto }
 .plate { position: relative; display: block; line-height: 0; box-shadow: 0 20px 56px -20px #000C }

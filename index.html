@@ -31,13 +31,15 @@
   </ul>
   <div class="waitNotice hidden" id="waitNotice">
     <b>🕓 已排上等候名單</b>
-    <span>這個 Google 帳號還不在受邀名單內,已自動幫你登記。<br>開通後,用同一個帳號再登入一次就能使用。</span>
+    <span>這個 Email 還不在受邀名單內,已自動幫你登記。<br>開通後,再登入一次就能使用。</span>
   </div>
-  <form method="POST" action="/auth/login" id="ssoForm">
-    <div id="tsWidget"></div>
-    <button class="sso" id="ssoBtn" type="submit">使用 Google 登入</button>
+  <!-- M1 寫死版:Email 比對白名單。M4 換回 Google 登入(與 manemu 同機制) -->
+  <form id="ssoForm">
+    <input class="mail" id="email" type="email" required placeholder="you@example.com" autocomplete="email" aria-label="Email">
+    <button class="sso" id="ssoBtn" type="submit">登入</button>
   </form>
-  <p class="fine">封測中:登入後需在受邀名單內才能啟用翻譯。</p>
+  <p class="loginErr hidden" id="loginErr"></p>
+  <p class="fine">封測中:Email 需在受邀名單內才能啟用翻譯。</p>
   <button class="demo" id="demoBtn">先看示範 →</button>
 </div>
 
@@ -49,6 +51,8 @@
     <div class="spacer"></div>
     <label class="dial">縮放<input type="range" id="zoom" min="55" max="130" value="100" aria-label="圖片縮放"><b id="zoomv">100%</b></label>
     <label class="dial">強度<input type="range" id="veil" min="0" max="60" value="30" aria-label="疊層強度"><b id="veilv">.30</b></label>
+    <button class="shoot" id="shoot">📷 拍照 / 上傳</button>
+    <input type="file" id="file" accept="image/*" class="hidden">
     <button class="pick" id="swap">切換圖片</button>
     <div class="seg" role="group" aria-label="顯示方式">
       <button data-mode="overlay" aria-pressed="true">A 疊字<kbd>1</kbd></button>
@@ -60,6 +64,7 @@
   </div>
 
   <div class="stage" id="stage">
+    <div class="progress hidden" id="progress"><i></i><span id="progressText"></span></div>
     <div class="frame" id="frame"><div class="plate"><img id="plate" alt=""><div class="acetate" id="acetate"></div></div></div>
     <div class="notepane" id="notepane">
       <div class="noteshead">
