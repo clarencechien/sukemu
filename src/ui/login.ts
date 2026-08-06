@@ -11,11 +11,15 @@ const enterApp = () => {
 };
 
 function applyMe(me: Me) {
+  document.body.dataset.auth = 'in';
   const usage = $('usage');
   usage.textContent = me.limitImages > 0 ? `${me.usedImages}/${me.limitImages} 張` : `${me.usedImages} 張`;
   if (me.isAdmin) $('adminBtn').classList.remove('hidden');
   enterApp();
 }
+
+/** 是否已登入(示範模式下所有 API 都會被伺服器擋掉,前端也不該假裝可用) */
+export const isAuthed = () => document.body.dataset.auth === 'in';
 
 /** 翻譯完成後更新頂列用量 */
 export function refreshUsage() {
@@ -79,6 +83,9 @@ export function initLogin() {
 
   ($('demoBtn') as HTMLButtonElement).onclick = enterApp;
   ($('adminBtn') as HTMLButtonElement).onclick = () => (location.href = '/admin');
+  ($('loginBtn') as HTMLButtonElement).onclick = () => {
+    document.body.dataset.screen = 'login';
+  };
 
   // 已有有效 session 就直接進 App
   api.me().then(applyMe).catch(() => {});

@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
-<body data-screen="login" data-mode="overlay">
+<body data-screen="login" data-mode="overlay" data-auth="out">
 
 <!-- ── 登入前(與 manemu 同構:wordmark+假名、命名文案、SSO、等候名單)── -->
 <div class="login" id="loginScreen">
@@ -47,7 +47,7 @@
   <button class="install hidden" id="installBtn">📲 安裝成 App(免商店・全螢幕無網址列)</button>
   <p class="fine hidden" id="iosHint">iPhone / iPad:用 Safari 開啟 → 分享 → 「加入主畫面」,即可全螢幕使用。</p>
   <p class="fine">封測中:Email 需在受邀名單內才能啟用翻譯。</p>
-  <button class="demo" id="demoBtn">先進去看看 →</button>
+  <button class="demo" id="demoBtn">看看介面 →</button>
 </div>
 
 <!-- ── App(原型移植)──────────────────────── -->
@@ -58,6 +58,8 @@
     <span class="usage" id="usage"></span>
     <div class="spacer"></div>
     <button class="pick hidden" id="adminBtn">管理</button>
+    <!-- 未登入(從「看看介面」進來)時的回頭路:沒有這個就只能重新整理 -->
+    <button class="pick" id="loginBtn">← 登入</button>
     <label class="dial">縮放<input type="range" id="zoom" min="55" max="300" value="100" aria-label="圖片縮放"><b id="zoomv">100%</b></label>
     <label class="dial">強度<input type="range" id="veil" min="0" max="60" value="30" aria-label="疊層強度"><b id="veilv">.30</b></label>
     <button class="mode" id="modeBtn" data-mode="fast">⚡ 快速</button>
@@ -89,7 +91,8 @@
         <div class="gblk" style="left:6%;top:30%;width:88%">鹽烤鯖魚 八五〇日圓<span class="corner c-tl"><i></i><i></i></span><span class="corner c-tr"><i></i><i></i></span><span class="corner c-bl"><i></i><i></i></span><span class="corner c-br"><i></i><i></i></span></div>
         <div class="gblk" style="left:6%;top:80%;width:66%">★ 白飯可免費續碗<span class="corner c-tl"><i></i><i></i></span><span class="corner c-tr"><i></i><i></i></span><span class="corner c-bl"><i></i><i></i></span><span class="corner c-br"><i></i><i></i></span></div>
       </div>
-      <p class="ghostHint">📷 拍照、上傳或貼上圖片 — 譯文會像這樣疊回原圖,按住就能看原文</p>
+      <p class="ghostHint">📷 拍照、上傳或貼上圖片 — 譯文會像這樣疊回原圖,按住就能看原文<br>
+        <b class="ghostAuth">這是介面預覽,登入後才能真的翻譯</b></p>
     </div>
     <div class="frame" id="frame"><div class="plate"><img id="plate" alt=""><div class="acetate" id="acetate"></div></div></div>
     <div class="notepane" id="notepane">
