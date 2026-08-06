@@ -75,8 +75,11 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
       el.dataset.low = String(isLow(b));
       el.setAttribute('aria-label', `標註 ${i + 1}:${b.zh}`);
       el.style.cssText = `left:${b.x}%;top:${b.y}%;width:${b.w}%;height:${b.h}%`;
+      // 拿掉 overflow:hidden 後,離譜的 fs 會直接洗版。Worker 端已依框幾何夾限,
+      // 但 IndexedDB 裡可能留著修正前的紀錄(實測 lite 曾回 fs 50–63),渲染時再兜一次
+      const fs = Math.min(Math.max(Number(b.fs) || 1.6, 0.6), 14);
       el.innerHTML =
-        `<div class="veil"></div><div class="txt" style="font-size:calc(var(--u)*${b.fs})"></div>` +
+        `<div class="veil"></div><div class="txt" style="font-size:calc(var(--u)*${fs})"></div>` +
         ['tl', 'tr', 'bl', 'br'].map(c => `<span class="corner c-${c}"><i></i><i></i></span>`).join('');
       (el.querySelector('.txt') as HTMLElement).textContent = b.zh;
       el.onclick = () => select(i, 'img');
@@ -183,7 +186,25 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
     plate.style.width = w + 'px';
     document.documentElement.style.setProperty('--u', w / 100 + 'px');
   }
-  plate.addEventListener('load', fit);
+  /* 舊紀錄自癒:修正前的 lite 輸出帶著離譜的 fs(實測 50–63)。
+     Worker 端的夾限要用影像長寬比,前端要等圖載入才知道,所以在這裡補跑同一條規則:
+     橫排字高不超過框高、直排字寬不超過框寬。伺服器已夾過的值不會被動到。 */
+  function healLegacyFs() {
+    if (!docs.length || !plate.naturalWidth) return;
+    const ar = plate.naturalHeight / plate.naturalWidth;
+    const txts = acetate.querySelectorAll<HTMLElement>('.blk .txt');
+    docs[docIdx].result.blocks.forEach((b, i) => {
+      const cap = Math.max(0.8, Math.min(14, b.v ? b.w : b.h * ar));
+      if (b.fs > cap) {
+        b.fs = +cap.toFixed(2);
+        if (txts[i]) txts[i].style.fontSize = `calc(var(--u)*${b.fs})`;
+      }
+    });
+  }
+  plate.addEventListener('load', () => {
+    healLegacyFs();
+    fit();
+  });
   new ResizeObserver(fit).observe(stage);
   noteRow.addEventListener('change', fit);
 
