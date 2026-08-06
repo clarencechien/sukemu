@@ -18,7 +18,10 @@ export const P1_SCHEMA = {
       type: 'ARRAY',
       items: {
         type: 'OBJECT',
-        properties: { x: NUM, y: NUM, w: NUM, h: NUM, fs: NUM, c: NUM, en: STR, zh: STR },
+        properties: {
+          x: NUM, y: NUM, w: NUM, h: NUM, fs: NUM, c: NUM, en: STR, zh: STR,
+          v: { type: 'BOOLEAN', description: '直排文字(直書)時為 true' },
+        },
         required: ['x', 'y', 'w', 'h', 'fs', 'c', 'en', 'zh'],
       },
     },
@@ -50,7 +53,8 @@ export const P1_PROMPT = `你是圖片版面分析與翻譯引擎。找出圖中
 
 規則:
 - 同一視覺段落合成一塊,不要逐行切碎;裝飾性或無意義的字樣略過
-- 直排文字:仍回報座標與原文,c 設 0.5 以下,zh 填「(直排文字,暫不支援)」
+- 直排文字(直書,由上而下閱讀):照常辨識與翻譯,並回傳 v: true;
+  x, y, w, h 仍為該塊實際外框(通常窄而高),fs 以單一字元的大小估
 - 只做初譯,不要加任何譯註或說明`;
 
 export const P2_PROMPT = `你是台灣在地化編輯。輸入是一張圖片的文字塊翻譯清單(JSON;i 為索引,en 為原文,zh 為初譯)。
@@ -120,6 +124,7 @@ export async function runP1(env: Env, image: string, mime: string) {
     c: Math.min(1, Math.max(0, Number(b.c) || 0)),
     en: String(b.en ?? ''),
     zh: String(b.zh ?? ''),
+    ...(b.v === true ? { v: true } : {}),
   }));
   return { lang: String(out.lang ?? '??').toUpperCase(), blocks };
 }

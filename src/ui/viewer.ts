@@ -51,7 +51,7 @@ export function initViewer(): Viewer {
 
     result.blocks.forEach((b, i) => {
       const el = document.createElement('div');
-      el.className = 'blk';
+      el.className = b.v ? 'blk vert' : 'blk';
       el.tabIndex = 0;
       el.setAttribute('role', 'button');
       el.dataset.low = String(isLow(b));
@@ -145,12 +145,18 @@ export function initViewer(): Viewer {
     };
   }
 
+  // C 註解在寬螢幕(含橫向手機)改「圖左・註解右」並排,圖用滿高度
+  const noteRow = matchMedia('(min-aspect-ratio: 13/9)');
   function fit() {
     if (!plate.naturalWidth) return;
     const cs = getComputedStyle(stage);
     const r = stage.getBoundingClientRect();
-    const availW = r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    const availH = (r.height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)) * (mode() === 'note' ? 0.5 : 1);
+    let availW = r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    let availH = r.height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    if (mode() === 'note') {
+      if (noteRow.matches) availW *= 0.5;
+      else availH *= 0.45;
+    }
     const ar = plate.naturalWidth / plate.naturalHeight;
     const w = Math.max(140, Math.min(availW, availH * ar) * zoom);
     plate.style.width = w + 'px';
@@ -158,6 +164,7 @@ export function initViewer(): Viewer {
   }
   plate.addEventListener('load', fit);
   new ResizeObserver(fit).observe(stage);
+  noteRow.addEventListener('change', fit);
 
   function setMode(m: Mode) {
     document.querySelectorAll<HTMLButtonElement>('.seg button')
@@ -179,11 +186,33 @@ export function initViewer(): Viewer {
 
   const zoomEl = $<HTMLInputElement>('zoom');
   const zoomv = $('zoomv');
-  zoomEl.oninput = () => {
-    zoom = Number(zoomEl.value) / 100;
-    zoomv.textContent = zoomEl.value + '%';
+  const setZoom = (z: number) => {
+    zoom = z;
+    zoomEl.value = String(Math.round(z * 100));
+    zoomv.textContent = Math.round(z * 100) + '%';
     fit();
   };
+  zoomEl.oninput = () => setZoom(Number(zoomEl.value) / 100);
+
+  // 手機:雙擊(雙點)圖片在 100% ↔ 200% 之間切換,放大後 stage 可捲動
+  const frame = $('frame');
+  let lastTap = 0;
+  let tapX = 0;
+  let tapY = 0;
+  frame.addEventListener('pointerdown', e => {
+    tapX = e.clientX;
+    tapY = e.clientY;
+  });
+  frame.addEventListener('pointerup', e => {
+    if (Math.hypot(e.clientX - tapX, e.clientY - tapY) > 10) return;
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      setZoom(zoom > 1 ? 1 : 2);
+      lastTap = 0;
+    } else {
+      lastTap = now;
+    }
+  });
   const veil = $<HTMLInputElement>('veil');
   const veilv = $('veilv');
   veil.oninput = () => {
@@ -219,13 +248,23 @@ export function initViewer(): Viewer {
     if (e.key === 'o' || e.key === 'O') lift(false);
   });
   let holdTimer: ReturnType<typeof setTimeout>;
-  acetate.addEventListener('pointerdown', () => {
+  let holdX = 0;
+  let holdY = 0;
+  acetate.addEventListener('pointerdown', e => {
+    holdX = e.clientX;
+    holdY = e.clientY;
     holdTimer = setTimeout(() => lift(true), 450);
   });
-  addEventListener('pointerup', () => {
-    clearTimeout(holdTimer);
-    lift(false);
+  // 手指移動(捲動)就取消長按,避免捲動時誤觸「看原圖」
+  acetate.addEventListener('pointermove', e => {
+    if (Math.hypot(e.clientX - holdX, e.clientY - holdY) > 8) clearTimeout(holdTimer);
   });
+  (['pointerup', 'pointercancel'] as const).forEach(t =>
+    addEventListener(t, () => {
+      clearTimeout(holdTimer);
+      lift(false);
+    }),
+  );
 
   render();
 

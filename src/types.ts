@@ -16,6 +16,8 @@ export type Block = {
   zh: string;
   /** 譯註,P2 產出,可無 */
   nt?: string;
+  /** 直排文字(直書),前端以 writing-mode: vertical-rl 呈現。契約新增的選用欄位 */
+  v?: boolean;
 };
 
 export type Result = {

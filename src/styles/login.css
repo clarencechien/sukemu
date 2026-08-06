@@ -44,6 +44,11 @@
 }
 .sso:hover { filter: brightness(1.1) }
 .login .fine { font-family: var(--doc); font-size: 11.5px; color: var(--mute); line-height: 1.7; margin: 10px 0 0 }
+.install {
+  width: 100%; margin-top: 10px; font-size: 14px; font-weight: 700; padding: 12px;
+  border-radius: 2px; border: 1.5px solid var(--cool); background: rgba(65, 201, 255, .08);
+  color: var(--cool); cursor: pointer;
+}
 .demo {
   margin-top: 26px; align-self: flex-start; background: transparent;
   border: 1px solid var(--edge); border-radius: 2px; color: var(--mute);
