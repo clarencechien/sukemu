@@ -6,6 +6,7 @@
 import { api, ApiError } from '../api';
 import { docStore, recordIds } from '../db';
 import { refreshHistory } from './history';
+import { refreshUsage } from './login';
 import type { Viewer } from './viewer';
 
 const MAX_EDGE = 2048;
@@ -74,7 +75,7 @@ export function initCapture(viewer: Viewer) {
       }
 
       show('讀取版面・翻譯');
-      const result = await api.p1(b64, mime, name);
+      const { result, usage: u1 } = await api.p1(b64, mime, name);
       if (!result.blocks.length) {
         fail('沒有偵測到可翻譯的文字');
         return;
@@ -100,10 +101,13 @@ export function initCapture(viewer: Viewer) {
       }
 
       show('在地化');
-      const edits = await api.p2(result.lang, result.blocks);
+      const { edits, usage: u2 } = await api.p2(result.lang, result.blocks);
       viewer.applyEdits(result, edits);
       if (id != null) docStore.updateBlocks(id, result.blocks).catch(() => {});
-      done();
+      const twd = (u1?.twd ?? 0) + (u2?.twd ?? 0);
+      if (twd > 0) info(`完成 · 本次約 NT$${twd.toFixed(2)}`);
+      else done();
+      refreshUsage();
     } catch (ex) {
       if (ex instanceof ApiError && ex.status === 401) {
         fail('示範模式無法翻譯 — 請回登入頁以受邀 Email 登入');

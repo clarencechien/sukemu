@@ -13,6 +13,7 @@
 .mark span { font-family: var(--doc); font-size: .6rem; color: var(--cool); margin-left: .5rem; letter-spacing: .2em }
 .langs { font-family: var(--data); font-size: .64rem; color: var(--mute) }
 .langs b { color: var(--cool); font-weight: 500 }
+.usage { font-family: var(--data); font-size: .56rem; color: var(--mute); font-variant-numeric: tabular-nums }
 .spacer { flex: 1 1 auto }
 .dial { display: flex; align-items: center; gap: .4rem; font-family: var(--data); font-size: .56rem; color: var(--mute) }
 .dial input { width: 5rem; accent-color: var(--cool) }
