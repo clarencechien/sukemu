@@ -44,8 +44,13 @@ npm run deploy
 
 ## 4. 網域與安全(建議)
 
+- **workers.dev / preview URL 已在設定碼關死**(`wrangler.jsonc` 的
+  `"workers_dev": false`、`"preview_urls": false`)——這兩種網址不經 zone,
+  WAF 與 Rate Limiting 全繞過。設定碼層級關掉的好處是:就算 dashboard 被誤開,
+  下次部署也會關回來。對外一律走自訂網域。
+  > 代價:預覽分支不再有可點的 URL。要臨時開回來就把 `preview_urls` 改成 `true`。
 - `wrangler.jsonc` 的 `CANONICAL_HOST` 填正式網域(例 `sukemu.ai-apps.work`)→
-  workers.dev 等非正式 host 一律 301/403(WAF 繞過洞封死)。留空 = 不檢查。
+  非正式 host 一律 301/403,這是上一條的程式端縱深。留空 = 不檢查。
 - **Turnstile(可選)**:Cloudflare Dashboard → Turnstile → 新增 widget,
   **domain 要填 sukemu 自己的網域**(不能沿用 manemu 的 widget)→
   site key 填 `TURNSTILE_SITE_KEY` var、`npx wrangler secret put TURNSTILE_SECRET`。
