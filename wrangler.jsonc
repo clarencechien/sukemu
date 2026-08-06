@@ -1,0 +1,27 @@
+{
+  // 部署三步:
+  //   wrangler r2 bucket create sukemu     ← 一次性
+  //   wrangler secret put GEMINI_API_KEY   ← 開發者只需要維護這把 key
+  //   npm run deploy
+  "name": "sukemu",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "sukemu"
+    }
+  ],
+  "vars": {
+    // 模型可在此換;P2 輸入小,值得換 Pro 級(handoff §13 待 A/B)
+    "GEMINI_MODEL": "gemini-3.5-flash",
+    "GEMINI_MODEL_P2": "gemini-3.5-flash"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

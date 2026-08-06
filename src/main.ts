@@ -4,6 +4,7 @@ import './styles/login.css';
 import './styles/viewer.css';
 import { initLogin } from './ui/login';
 import { initViewer } from './ui/viewer';
+import { initCapture } from './ui/capture';
 
 initLogin();
-initViewer();
+initCapture(initViewer());

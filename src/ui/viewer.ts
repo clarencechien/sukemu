@@ -1,6 +1,14 @@
-import type { Block, Filter, Mode } from '../types';
+import type { Block, Filter, Mode, Result } from '../types';
 import { LOW_CONFIDENCE } from '../types';
-import { SAMPLES } from '../data/samples';
+import { SAMPLES, type Sample } from '../data/samples';
+import type { P2Edit } from '../api';
+
+export type Viewer = {
+  /** 新增一份文件(上傳結果)並切過去顯示 */
+  addDoc(doc: Sample): void;
+  /** 套用 P2 修訂;若該文件正在顯示則就地更新畫面 */
+  applyEdits(result: Result, edits: P2Edit[]): void;
+};
 
 /* App 畫面:自原型移植的疊層譯讀器。
    互動規格(照抄原型,不要改):
@@ -10,7 +18,7 @@ import { SAMPLES } from '../data/samples';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-export function initViewer() {
+export function initViewer(): Viewer {
   const stage = $('stage');
   const plate = $<HTMLImageElement>('plate');
   const acetate = $('acetate');
@@ -20,7 +28,8 @@ export function initViewer() {
   const ncount = $('ncount');
   const langs = $('langs');
 
-  let sampleIdx = 0;
+  const docs: Sample[] = [...SAMPLES];
+  let docIdx = 0;
   let cur = -1;
   let noteEls: HTMLElement[] = [];
   let pins: HTMLElement[] = [];
@@ -31,7 +40,7 @@ export function initViewer() {
   const isLow = (b: Block) => b.c < LOW_CONFIDENCE;
 
   function render() {
-    const { src, result } = SAMPLES[sampleIdx];
+    const { src, result } = docs[docIdx];
     plate.src = src;
     plate.alt = result.name;
     langs.innerHTML = `${result.lang} → <b>正體中文</b>`;
@@ -104,14 +113,14 @@ export function initViewer() {
   }
 
   function countNotes() {
-    const { blocks } = SAMPLES[sampleIdx].result;
+    const { blocks } = docs[docIdx].result;
     const f = (document.body.dataset.filter ?? 'all') as Filter;
     const n = blocks.filter(b => (f === 'nt' ? b.nt : f === 'low' ? isLow(b) : true)).length;
     ncount.textContent = f === 'all' ? `${n} 則標註` : `${n} / ${blocks.length} 則`;
   }
 
   function paint() {
-    const { blocks } = SAMPLES[sampleIdx].result;
+    const { blocks } = docs[docIdx].result;
     [...acetate.querySelectorAll('.blk')].forEach((el, i) => el.setAttribute('aria-current', String(i === cur)));
     pins.forEach((pin, i) => (pin.dataset.on = String(i === cur)));
     noteEls.forEach((n, i) => n.setAttribute('aria-current', String(i === cur)));
@@ -164,7 +173,7 @@ export function initViewer() {
   setFilter('all');
   $('flip').onclick = () => setMode(mode() === 'note' ? 'overlay' : 'note');
   $('swap').onclick = () => {
-    sampleIdx = (sampleIdx + 1) % SAMPLES.length;
+    docIdx = (docIdx + 1) % docs.length;
     render();
   };
 
@@ -219,4 +228,26 @@ export function initViewer() {
   });
 
   render();
+
+  return {
+    addDoc(doc) {
+      docs.push(doc);
+      docIdx = docs.length - 1;
+      render();
+    },
+    applyEdits(result, edits) {
+      edits.forEach(e => {
+        const b = result.blocks[e.i];
+        if (!b) return;
+        if (e.zh) b.zh = e.zh;
+        if (e.nt) b.nt = e.nt;
+      });
+      if (docs[docIdx].result === result) {
+        const keep = cur;
+        render();
+        cur = keep;
+        paint();
+      }
+    },
+  };
 }
