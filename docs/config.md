@@ -29,16 +29,18 @@
 
 # 二、模型檔位
 
-決策理由見 [ADR 0001](adr/0001-fast-accurate-model-modes.md)。兩個模式,模型都在
-`wrangler.jsonc` vars,**預設 `fast`**:
+決策見 [ADR 0001](adr/0001-fast-accurate-model-modes.md)(**含後記:快速檔位實測不合格,
+現況預設精準、切換鈕隱藏**)。模型都在 `wrangler.jsonc` vars:
 
-| 模式 | var | 模型 | 一般菜單 |
-|---|---|---|---|
-| ⚡ 快速(預設) | `FAST_MODEL` | `gemini-3.5-flash-lite` | ≈ NT$0.51 |
-| ⚖ 精準 | `ACCURATE_MODEL` | `gemini-3.6-flash` | ≈ NT$1.37 |
+| 模式 | var | 模型 | 一般菜單 | 現況 |
+|---|---|---|---|---|
+| ⚖ 精準 | `ACCURATE_MODEL` | `gemini-3.6-flash` | ≈ NT$1.37 | **預設** |
+| ⚡ 快速 | `FAST_MODEL` | `gemini-3.5-flash-lite` | ≈ NT$0.51 | 停用(框漂移+譯文串接) |
 
-- **全域切換**:改 `DEFAULT_MODE` 為 `"accurate"` 重新部署
-- **單張切換**:App 頂列的檔位鈕,切了之後同一張圖會**重翻**(不吃舊快取),選擇記在瀏覽器
+- **`DEFAULT_MODE`**:全域預設檔位
+- **`MODE_TOGGLE`**:`"off"` = 鎖定預設(UI 隱藏切換鈕、API 無視 client 要求)。
+  日後 lite 世代更新、重跑 A/B 合格後,改回 `"on"` + `DEFAULT_MODE:"fast"` 即恢復雙檔位
+- **單張切換**(MODE_TOGGLE 開啟時):App 頂列檔位鈕,切了之後同一張圖會**重翻**(不吃舊快取)
 - **P2 想單獨用別的模型**:設 `FAST_MODEL_P2` / `ACCURATE_MODEL_P2`
   (不設 = 同該模式的主模型;P2 只佔 8–19% 成本,獨立調的效益有限)
 

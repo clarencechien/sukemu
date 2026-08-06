@@ -1,11 +1,13 @@
-/* 模型檔位切換(ADR 0001)。
-   預設值由 Worker 的 DEFAULT_MODE 決定(目前 fast);使用者可就地切成精準,
-   把同一張難圖重翻一次,不必重新部署。選擇記在 localStorage。 */
+/* 模型檔位切換(ADR 0001 + 後記)。
+   /api/config 的 allowModeToggle=false 時(現況:快速模式實測不合格)
+   隱藏切換鈕、鎖定伺服器預設檔位,localStorage 裡的舊選擇一併忽略。
+   lite 修好後把 var MODE_TOGGLE 打開,這裡不用改。 */
 
 import { api, type ModelMode } from '../api';
 
 const KEY = 'sukemu.modelMode';
-let mode: ModelMode = (localStorage.getItem(KEY) as ModelMode) || 'fast';
+let mode: ModelMode = (localStorage.getItem(KEY) as ModelMode) || 'accurate';
+let locked = false;
 
 export const modelMode = () => mode;
 
@@ -20,15 +22,20 @@ export function initMode() {
         : '快速模式:成本優先。框歪了就切到精準再翻一次';
   };
 
-  // 伺服器預設優先於「使用者還沒選過」的情況
-  if (!localStorage.getItem(KEY)) {
-    api.config().then(cfg => {
+  api.config().then(cfg => {
+    if (!cfg.allowModeToggle) {
+      locked = true;
       mode = cfg.defaultModelMode;
+      btn.classList.add('hidden');
       paint();
-    }).catch(() => {});
-  }
+      return;
+    }
+    if (!localStorage.getItem(KEY)) mode = cfg.defaultModelMode;
+    paint();
+  }).catch(() => {});
 
   btn.onclick = () => {
+    if (locked) return;
     mode = mode === 'accurate' ? 'fast' : 'accurate';
     localStorage.setItem(KEY, mode);
     paint();
