@@ -47,7 +47,7 @@
   <button class="install hidden" id="installBtn">📲 安裝成 App(免商店・全螢幕無網址列)</button>
   <p class="fine hidden" id="iosHint">iPhone / iPad:用 Safari 開啟 → 分享 → 「加入主畫面」,即可全螢幕使用。</p>
   <p class="fine">封測中:Email 需在受邀名單內才能啟用翻譯。</p>
-  <button class="demo" id="demoBtn">先看示範 →</button>
+  <button class="demo" id="demoBtn">先進去看看 →</button>
 </div>
 
 <!-- ── App(原型移植)──────────────────────── -->
@@ -76,6 +76,21 @@
 
   <div class="stage" id="stage">
     <div class="progress hidden" id="progress"><i></i><span id="progressText"></span></div>
+    <!-- 空狀態:虛的假菜單 + 疊字示意(仿 manemu ghost),不載任何示範圖 -->
+    <div class="ghost" id="ghost" aria-hidden="true">
+      <div class="ghostBoard">
+        <pre>本日のおすすめ
+──────────────────
+さばの塩焼き ‥‥‥ ８５０円
+ぶりの照り焼き ‥‥ ９００円
+銀鮭の西京焼き ‥‥ ９００円
+
+★ ごはん おかわり自由</pre>
+        <div class="gblk" style="left:6%;top:30%;width:88%">鹽烤鯖魚 八五〇日圓<span class="corner c-tl"><i></i><i></i></span><span class="corner c-tr"><i></i><i></i></span><span class="corner c-bl"><i></i><i></i></span><span class="corner c-br"><i></i><i></i></span></div>
+        <div class="gblk" style="left:6%;top:80%;width:66%">★ 白飯可免費續碗<span class="corner c-tl"><i></i><i></i></span><span class="corner c-tr"><i></i><i></i></span><span class="corner c-bl"><i></i><i></i></span><span class="corner c-br"><i></i><i></i></span></div>
+      </div>
+      <p class="ghostHint">📷 拍照、上傳或貼上圖片 — 譯文會像這樣疊回原圖,按住就能看原文</p>
+    </div>
     <div class="frame" id="frame"><div class="plate"><img id="plate" alt=""><div class="acetate" id="acetate"></div></div></div>
     <div class="notepane" id="notepane">
       <div class="noteshead">
