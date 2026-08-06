@@ -66,28 +66,67 @@ npm run deploy
 
 ## 6. 價格:一張多少錢?
 
-每次 Gemini 回應都帶 `usageMetadata`,Worker 直接用**實際 token 數**計算成本並累計到 DO:
+每次 Gemini 回應都帶 `usageMetadata`,Worker 用**實際 token 數**計算成本並累計到 DO:
 - 每次翻譯完成,前端提示「完成 · 本次約 NT$X」
 - `/admin` 的「今日」欄顯示每人當日累計張數與 NT$
-- 單價與匯率是 vars,換模型檔位時記得對照官方價目表更新:
-
-| var | 預設 | 說明 |
-|---|---|---|
-| `PRICE_IN_USD_PER_M` | 0.30 | 輸入單價(USD / 百萬 token) |
-| `PRICE_OUT_USD_PER_M` | 2.50 | 輸出單價(**含 thinking token**) |
-| `USD_TWD` | 31.5 | 匯率 |
 
 **估算公式**:`成本 = (inTok × 輸入單價 + outTok × 輸出單價) ÷ 1M × 匯率`,
-其中 `outTok = 回應 token + thinking token`(thinking 依輸出價計費,是成本大宗)。
+其中 `outTok = 回應 token + thinking token`——**thinking 依輸出價計費,是成本大宗**。
 
-**量級參考**(以預設單價估,實際以 admin 頁顯示為準):
+### 單價表(2026-08 官方價目,USD / 百萬 token)
 
-| 情境 | P1 in / out | P2 in / out | 估算 |
+單價按模型內建在 `worker/gemini.ts`,**換 `GEMINI_MODEL` 會自動換價**。
+官方調價或出新模型時用 var `MODEL_PRICES` 覆寫即可,不必改碼:
+`"MODEL_PRICES": "{\"gemini-3.6-flash\":[1.5,7.5]}"`
+
+| 模型 | 輸入 | 輸出(含 thinking) |
+|---|---|---|
+| `gemini-3.6-flash` | $1.50 | $7.50 |
+| `gemini-3.5-flash` | $1.50 | $9.00 |
+| `gemini-3.5-flash-lite` | $0.30 | $2.50 |
+| `gemini-3.1-flash-lite` | $0.25 | $1.50 |
+| `gemini-3-flash-preview` | $0.50 | $3.00 |
+| `gemini-3.1-pro-preview` | $2.00 | $12.00 |
+
+> **沒有 `gemini-3.6-flash-lite`**——3.6 只出 Flash,lite 檔位停在 3.5。
+
+### 模型檔位(ADR 0001)
+
+兩個模式,模型都在 `wrangler.jsonc` vars,**預設 `fast`**:
+
+| 模式 | var | 模型 | 一般菜單 |
 |---|---|---|---|
-| 簡單招牌(2–3 塊) | ~2,000 / ~2,000 | ~300 / ~300 | **≈ NT$0.2** |
-| 一般菜單(10 塊上下) | ~2,500 / ~5,000 | ~1,500 / ~1,000 | **≈ NT$0.5** |
-| 複雜資訊圖(30+ 塊、thinking 長) | ~3,000 / ~15,000 | ~4,000 / ~3,000 | **≈ NT$1.6** |
+| ⚡ 快速(預設) | `FAST_MODEL` | `gemini-3.5-flash-lite` | ≈ NT$0.51 |
+| ⚖ 精準 | `ACCURATE_MODEL` | `gemini-3.6-flash` | ≈ NT$1.37 |
 
-成本結構的重點:**影像輸入很便宜(不到一成),八成以上是 P1 的輸出+thinking**。
-所以「分塊高解析度」(M6)主要付的是延遲而不是錢;若要壓成本,
-方向是縮短 P1 輸出(座標精度、欄位精簡)而不是降影像解析度。
+- 全域切換:改 `DEFAULT_MODE` 為 `"accurate"` 重新部署
+- 單張切換:App 頂列的檔位鈕,切了之後同一張圖會**重翻**(不吃舊快取),選擇記在瀏覽器
+- P2 想單獨用別的模型:設 `FAST_MODEL_P2` / `ACCURATE_MODEL_P2`
+
+### 一張多少錢(匯率 31.5)
+
+token 用量為估計值,實際以 app 提示與 `/admin` 顯示為準。
+
+| 情境 | 3.5 Flash | 3.6 Flash(精準) | 3.5 Flash-Lite(快速) | 3.1 Flash-Lite |
+|---|---|---|---|---|
+| 簡單招牌(2–3 塊) | NT$0.76 | NT$0.56 | NT$0.20 | NT$0.13 |
+| 一般菜單(~11 塊) | NT$1.89 | NT$1.37 | NT$0.51 | NT$0.32 |
+| 複雜資訊圖(30+ 塊) | NT$5.43 | NT$3.86 | NT$1.48 | NT$0.91 |
+
+**成本結構:P1 佔 80–92%,其中八成以上是輸出+thinking;影像輸入不到一成。**
+所以:
+- 「分塊高解析度」(M6)主要付的是**延遲**不是錢
+- 要壓成本,方向是縮短 P1 輸出或換 P1 的模型,**不是**降影像解析度
+- 換 P2 的模型省很有限(P2 只佔 8–19%)
+
+### 換模型前先跑 A/B
+
+P1 是框準度那一趟,換小模型省錢但可能毀掉整個產品(handoff §12 的第一驗收項)。
+`scripts/ab-models.mjs` 用同一張圖跑多個模型,印出延遲、token、成本與框數量:
+
+```bash
+GEMINI_API_KEY=xxx node scripts/ab-models.mjs 照片.jpg
+GEMINI_API_KEY=xxx node scripts/ab-models.mjs 照片.jpg gemini-3.6-flash gemini-3.5-flash-lite
+```
+
+輸出會存成 `ab-<模型>.json`,把座標貼回前端假資料就能目視比對框準度。

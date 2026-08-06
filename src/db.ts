@@ -8,6 +8,8 @@ export type DocRecord = {
   id?: number;
   /** 壓縮後影像的 SHA-256,上傳前先查,翻過就不再打 API */
   hash: string;
+  /** 產生這筆結果的模型檔位;切換檔位後同一張圖要重翻,不能吃舊快取 */
+  mode?: 'fast' | 'accurate';
   /** ISO 時間 */
   at: string;
   name: string;
@@ -53,9 +55,10 @@ export const docStore = {
     rec.blocks = blocks;
     await tx('readwrite', s => s.put(rec));
   },
-  async findByHash(hash: string) {
+  /** 同一張圖 + 同一個檔位才算命中;切到精準模式會重翻(這正是切換的用意) */
+  async findByHash(hash: string, mode: 'fast' | 'accurate') {
     const hits = await tx<DocRecord[]>('readonly', s => s.index('hash').getAll(hash));
-    return hits[0] ?? null;
+    return hits.find(h => (h.mode ?? 'fast') === mode) ?? null;
   },
   async list() {
     const all = await tx<DocRecord[]>('readonly', s => s.getAll());

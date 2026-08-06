@@ -42,6 +42,14 @@
   font-family: var(--chrome); font-weight: 700; font-size: .64rem; letter-spacing: .1em; padding: .38rem .65rem; cursor: pointer;
 }
 .shoot:hover { background: var(--cool); color: #04121B }
+/* 模型檔位:非譯文元素,一律用中性/青色語彙(橘紅只給譯文) */
+.mode {
+  appearance: none; border: 1px solid var(--edge); background: transparent; color: var(--mute); border-radius: 2px;
+  font-family: var(--chrome); font-weight: 600; font-size: .62rem; letter-spacing: .08em; padding: .38rem .6rem;
+  cursor: pointer; white-space: nowrap;
+}
+.mode[data-mode=accurate] { border-color: var(--cool); color: var(--cool) }
+.mode:hover { border-color: var(--cool) }
 :is(.seg button, .pick, .flip, .hold, .blk, .note):focus-visible { outline: 2px solid var(--cool); outline-offset: 2px }
 
 /* ── stage ──────────────────────────────────── */

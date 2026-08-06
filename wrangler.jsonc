@@ -20,9 +20,17 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["QuotaCounter"] }],
   "vars": {
-    // 模型可在此換;P2 輸入小,值得換 Pro 級(handoff §13 待 A/B)
-    "GEMINI_MODEL": "gemini-3.5-flash",
-    "GEMINI_MODEL_P2": "gemini-3.5-flash",
+    // 模型檔位(決策見 docs/adr/0001-fast-accurate-model-modes.md):
+    //   fast     省錢優先,一般菜單 ≈ NT$0.51 ← 預設
+    //   accurate 品質優先,一般菜單 ≈ NT$1.37
+    // 框準度不夠就把 DEFAULT_MODE 改成 "accurate" 重新部署;
+    // 前端也有切換鈕,單張可臨時改用精準模式重翻。
+    "DEFAULT_MODE": "fast",
+    "FAST_MODEL": "gemini-3.5-flash-lite",
+    "ACCURATE_MODEL": "gemini-3.6-flash",
+    // P2 只佔 8–19% 成本,要單獨調就設這兩個(不設 = 同該模式的主模型)
+    // "FAST_MODEL_P2": "gemini-3.6-flash",
+    // "ACCURATE_MODEL_P2": "gemini-3.1-pro-preview",
     // 額度分級:每日「張數」,0 = 無上限。加級別、在名單標人都不用改碼
     "QUOTA_TIERS": "{\"admin\":0,\"pro\":200,\"beta\":30,\"trial\":5}",
     "DEFAULT_TIER": "beta",
@@ -33,11 +41,9 @@
     "CANONICAL_HOST": "",
     // Turnstile site key 是公開值;TURNSTILE_SECRET 走 secret。兩者都不設 → 登入不驗
     "TURNSTILE_SITE_KEY": "",
-    // 計價(估算用):美元/百萬 token 單價 × 匯率 → 每張成本 TWD,顯示在 /admin 與完成提示
-    // 預設值是 Gemini 2.5 Flash 檔位(input $0.30/M、output 含 thinking $2.50/M),
-    // 模型換檔請對照官方價目表更新
-    "PRICE_IN_USD_PER_M": "0.30",
-    "PRICE_OUT_USD_PER_M": "2.50",
+    // 計價:單價表按模型內建在 worker/gemini.ts,換 GEMINI_MODEL 會自動換價。
+    // 官方調價或出新模型時,用 MODEL_PRICES 覆寫即可(不必改碼):
+    //   "MODEL_PRICES": "{\"gemini-3.6-flash\":[1.5,7.5]}"   ← [輸入, 輸出] USD/百萬 token
     "USD_TWD": "31.5"
   },
   "observability": {

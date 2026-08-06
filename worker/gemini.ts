@@ -67,6 +67,20 @@ export const P2_PROMPT = `你是台灣在地化編輯。輸入是一張圖片的
 
 export type TokenUsage = { inTok: number; outTok: number };
 
+/** 模型檔位(ADR 0001):fast 省錢優先(預設)、accurate 品質優先 */
+export type ModelMode = 'fast' | 'accurate';
+
+export const resolveMode = (env: Env, requested?: string): ModelMode =>
+  (requested || env.DEFAULT_MODE) === 'accurate' ? 'accurate' : 'fast';
+
+/** 模式 → 模型。P2 可用 *_MODEL_P2 單獨覆寫(P2 只佔 8–19% 成本,值得獨立調) */
+function modelFor(env: Env, mode: ModelMode, pass: 'p1' | 'p2'): string {
+  if (mode === 'accurate') {
+    return (pass === 'p2' ? env.ACCURATE_MODEL_P2 : '') || env.ACCURATE_MODEL || 'gemini-3.6-flash';
+  }
+  return (pass === 'p2' ? env.FAST_MODEL_P2 : '') || env.FAST_MODEL || 'gemini-3.5-flash-lite';
+}
+
 async function generateJSON(
   env: Env,
   model: string,
@@ -96,7 +110,8 @@ async function generateJSON(
     const { mediaResolution: _drop, ...rest } = config;
     res = await call(rest);
   }
-  if (!res.ok) throw new Error(`Gemini ${res.status}:${(await res.text()).slice(0, 400)}`);
+  // 錯誤訊息帶上模型名:換檔位後出問題時,要一眼看出是哪個模型在報錯
+  if (!res.ok) throw new Error(`Gemini ${res.status}(${model}):${(await res.text()).slice(0, 300)}`);
 
   const data = (await res.json()) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -112,18 +127,37 @@ async function generateJSON(
   return { data: JSON.parse(text), usage };
 }
 
-/** token 用量 → 估算成本 TWD(單價與匯率在 vars,見 docs/oidc-setup.md「價格」) */
-export function estCostTwd(env: Env, usage: TokenUsage): number {
-  const pin = Number(env.PRICE_IN_USD_PER_M || 0.3);
-  const pout = Number(env.PRICE_OUT_USD_PER_M || 2.5);
+/* 各模型單價(USD / 百萬 token):[輸入, 輸出],輸出價含 thinking token。
+   2026-08 官方價目表。換模型時自動換價——不要再把單價寫死成單一組,
+   否則改了 GEMINI_MODEL 卻沿用舊價,帳會算錯(此坑已踩過)。
+   價目調整或新模型:用 var MODEL_PRICES 覆寫/補充,不必改碼。 */
+const DEFAULT_PRICES: Record<string, [number, number]> = {
+  'gemini-3.6-flash': [1.5, 7.5],
+  'gemini-3.5-flash': [1.5, 9.0],
+  'gemini-3.5-flash-lite': [0.3, 2.5],
+  'gemini-3.1-flash-lite': [0.25, 1.5],
+  'gemini-3-flash-preview': [0.5, 3.0],
+  'gemini-3.1-pro-preview': [2.0, 12.0],
+};
+
+/** token 用量 → 估算成本 TWD(見 docs/oidc-setup.md §6) */
+export function estCostTwd(env: Env, model: string, usage: TokenUsage): number {
+  let table = DEFAULT_PRICES;
+  try {
+    table = { ...DEFAULT_PRICES, ...JSON.parse(env.MODEL_PRICES || '{}') };
+  } catch {
+    /* 格式錯就用內建表 */
+  }
+  // 查不到的模型退回內建表最貴的一組,寧可高估也不要低報成本
+  const [pin, pout] = table[model] ?? [1.5, 9.0];
   const rate = Number(env.USD_TWD || 31.5);
   return +(((usage.inTok * pin + usage.outTok * pout) / 1e6) * rate).toFixed(4);
 }
 
 const clampPct = (n: unknown) => Math.min(100, Math.max(0, Number(n) || 0));
 
-export async function runP1(env: Env, image: string, mime: string) {
-  const model = env.GEMINI_MODEL || 'gemini-3.5-flash';
+export async function runP1(env: Env, image: string, mime: string, mode: ModelMode) {
+  const model = modelFor(env, mode, 'p1');
   const { data, usage } = await generateJSON(
     env,
     model,
@@ -144,11 +178,11 @@ export async function runP1(env: Env, image: string, mime: string) {
     zh: String(b.zh ?? ''),
     ...(b.v === true ? { v: true } : {}),
   }));
-  return { lang: String(out.lang ?? '??').toUpperCase(), blocks, usage };
+  return { lang: String(out.lang ?? '??').toUpperCase(), blocks, usage, model, mode };
 }
 
-export async function runP2(env: Env, lang: string, blocks: { en: string; zh: string }[]) {
-  const model = env.GEMINI_MODEL_P2 || env.GEMINI_MODEL || 'gemini-3.5-flash';
+export async function runP2(env: Env, lang: string, blocks: { en: string; zh: string }[], mode: ModelMode) {
+  const model = modelFor(env, mode, 'p2');
   const input = JSON.stringify({
     lang,
     blocks: blocks.map((b, i) => ({ i, en: b.en, zh: b.zh })),
@@ -163,5 +197,5 @@ export async function runP2(env: Env, lang: string, blocks: { en: string; zh: st
       ...(typeof e.zh === 'string' && e.zh ? { zh: e.zh } : {}),
       ...(typeof e.nt === 'string' && e.nt ? { nt: e.nt } : {}),
     }));
-  return { edits, usage };
+  return { edits, usage, model, mode };
 }

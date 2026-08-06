@@ -15,7 +15,7 @@ import {
   verifyGoogleIdToken,
   type UserInfo,
 } from './auth';
-import { estCostTwd, runP1, runP2 } from './gemini';
+import { estCostTwd, resolveMode, runP1, runP2 } from './gemini';
 import { handleAdmin } from './admin';
 import type { Usage } from './quota';
 export { QuotaCounter } from './quota';
@@ -25,8 +25,13 @@ export interface Env {
   R2: R2Bucket;
   QUOTA: DurableObjectNamespace;
   GEMINI_API_KEY: string;
-  GEMINI_MODEL?: string;
-  GEMINI_MODEL_P2?: string;
+  // 模型檔位(ADR 0001):fast 省錢優先(預設)、accurate 品質優先
+  DEFAULT_MODE?: string;
+  FAST_MODEL?: string;
+  ACCURATE_MODEL?: string;
+  /** P2 單獨覆寫(可不設,預設同該模式的主模型) */
+  FAST_MODEL_P2?: string;
+  ACCURATE_MODEL_P2?: string;
   // OIDC(未設 GOOGLE_CLIENT_ID → 開發用 Email 直登)
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
@@ -40,8 +45,8 @@ export interface Env {
   DAILY_IMAGES_LIMIT?: string;
   // 安全與計價
   CANONICAL_HOST?: string;
-  PRICE_IN_USD_PER_M?: string;
-  PRICE_OUT_USD_PER_M?: string;
+  /** 覆寫/補充模型單價表:{"model-id":[輸入USD/M, 輸出USD/M]} */
+  MODEL_PRICES?: string;
   USD_TWD?: string;
 }
 
@@ -89,6 +94,7 @@ export default {
       return json({
         mode: env.GOOGLE_CLIENT_ID ? 'oidc' : 'dev',
         turnstileSiteKey: env.TURNSTILE_SITE_KEY || null,
+        defaultModelMode: resolveMode(env),
       });
     }
 
@@ -227,10 +233,11 @@ async function api(
   }
 
   if (path === '/api/p1' && req.method === 'POST') {
-    const { image, mime, name } = (await req.json().catch(() => ({}))) as {
+    const { image, mime, name, modelMode } = (await req.json().catch(() => ({}))) as {
       image?: string;
       mime?: string;
       name?: string;
+      modelMode?: string;
     };
     if (!image || !mime?.startsWith('image/')) return bad('缺少影像資料');
     if (image.length > MAX_IMAGE_B64) return bad('影像過大,請縮小後再試', 413);
@@ -241,8 +248,8 @@ async function api(
       return bad(`今日額度已用完(${u.count}/${user.limitImages} 張),台灣時間早上 8 點重置`, 429);
     }
 
-    const { lang, blocks, usage } = await runP1(env, image, mime);
-    const twd = estCostTwd(env, usage);
+    const { lang, blocks, usage, model, mode } = await runP1(env, image, mime, resolveMode(env, modelMode));
+    const twd = estCostTwd(env, model, usage);
     // 成功才計費(失敗不扣額度)
     ctx.waitUntil(
       quotaStub(env, email).fetch('https://do/add', {
@@ -250,24 +257,25 @@ async function api(
         body: JSON.stringify({ images: 1, ...usage, costTwd: twd }),
       }),
     );
-    return json({ ok: true, result: { name: name || 'photo', lang, blocks }, usage: { ...usage, twd } });
+    return json({ ok: true, result: { name: name || 'photo', lang, blocks }, usage: { ...usage, twd, model, mode } });
   }
 
   if (path === '/api/p2' && req.method === 'POST') {
-    const { lang, blocks } = (await req.json().catch(() => ({}))) as {
+    const { lang, blocks, modelMode } = (await req.json().catch(() => ({}))) as {
       lang?: string;
       blocks?: { en: string; zh: string }[];
+      modelMode?: string;
     };
     if (!Array.isArray(blocks) || !blocks.length) return bad('缺少文字塊');
-    const { edits, usage } = await runP2(env, lang || '??', blocks);
-    const twd = estCostTwd(env, usage);
+    const { edits, usage, model, mode } = await runP2(env, lang || '??', blocks, resolveMode(env, modelMode));
+    const twd = estCostTwd(env, model, usage);
     ctx.waitUntil(
       quotaStub(env, email).fetch('https://do/add', {
         method: 'POST',
         body: JSON.stringify({ images: 0, ...usage, costTwd: twd }),
       }),
     );
-    return json({ ok: true, edits, usage: { ...usage, twd } });
+    return json({ ok: true, edits, usage: { ...usage, twd, model, mode } });
   }
 
   return bad('不存在的 API', 404);
