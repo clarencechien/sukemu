@@ -26,6 +26,12 @@ export type Result = {
   blocks: Block[];
 };
 
+/** 畫面上的一份文件:影像(object URL)+ 翻譯結果 */
+export type Doc = {
+  src: string;
+  result: Result;
+};
+
 /** 版面信心門檻:低於此值標「待複核」 */
 export const LOW_CONFIDENCE = 0.9;
 

@@ -52,7 +52,7 @@ GEMINI_API_KEY=xxx node scripts/ab-models.mjs 照片.jpg
 GEMINI_API_KEY=xxx node scripts/ab-models.mjs 照片.jpg gemini-3.6-flash gemini-3.5-flash-lite
 ```
 
-輸出會存成 `ab-<模型>.json`,把座標貼回 `src/data/samples.ts` 就能目視比對框準度。
+輸出會存成 `ab-<模型>.json`(含正規化百分比座標),疊回原圖目視比對框準度。
 
 ---
 

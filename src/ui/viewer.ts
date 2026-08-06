@@ -1,11 +1,10 @@
-import type { Block, Filter, Mode, Result } from '../types';
+import type { Block, Doc, Filter, Mode, Result } from '../types';
 import { LOW_CONFIDENCE } from '../types';
-import { SAMPLES, type Sample } from '../data/samples';
 import type { P2Edit } from '../api';
 
 export type Viewer = {
   /** 新增一份文件(上傳結果)並切過去顯示 */
-  addDoc(doc: Sample): void;
+  addDoc(doc: Doc): void;
   /** 套用 P2 修訂;若該文件正在顯示則就地更新畫面 */
   applyEdits(result: Result, edits: P2Edit[]): void;
 };
@@ -28,8 +27,10 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
   const ncount = $('ncount');
   const langs = $('langs');
 
-  const docs: Sample[] = [...SAMPLES];
+  // 沒有內建示範圖:空狀態顯示 ghost 佔位(index.html #ghost),第一份文件來自上傳或紀錄
+  const docs: Doc[] = [];
   let docIdx = 0;
+  const swapBtn = $('swap') as HTMLButtonElement;
   let cur = -1;
   let noteEls: HTMLElement[] = [];
   let pins: HTMLElement[] = [];
@@ -42,6 +43,21 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
   const isLow = (b: Block) => b.c < LOW_CONFIDENCE;
 
   function render() {
+    const empty = !docs.length;
+    document.body.dataset.empty = String(empty);
+    swapBtn.classList.toggle('hidden', docs.length < 2);
+    if (empty) {
+      plate.removeAttribute('src');
+      acetate.innerHTML = '';
+      notes.innerHTML = '';
+      noteEls = [];
+      pins = [];
+      cur = -1;
+      langs.innerHTML = '… → <b>正體中文</b>';
+      ncount.textContent = '';
+      insp.innerHTML = '<div class="empty">📷 拍照、上傳或貼上圖片開始 — 結果會存進「紀錄」,只在這台裝置上</div>';
+      return;
+    }
     const { src, result } = docs[docIdx];
     plate.src = src;
     plate.alt = result.name;
@@ -115,6 +131,7 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
   }
 
   function countNotes() {
+    if (!docs.length) return;
     const { blocks } = docs[docIdx].result;
     const f = (document.body.dataset.filter ?? 'all') as Filter;
     const n = blocks.filter(b => (f === 'nt' ? b.nt : f === 'low' ? isLow(b) : true)).length;
@@ -122,6 +139,7 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
   }
 
   function paint() {
+    if (!docs.length) return;
     const { blocks } = docs[docIdx].result;
     [...acetate.querySelectorAll('.blk')].forEach((el, i) => el.setAttribute('aria-current', String(i === cur)));
     pins.forEach((pin, i) => (pin.dataset.on = String(i === cur)));
@@ -182,7 +200,8 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
   setMode('overlay');
   setFilter('all');
   $('flip').onclick = () => setMode(mode() === 'note' ? 'overlay' : 'note');
-  $('swap').onclick = () => {
+  swapBtn.onclick = () => {
+    if (!docs.length) return;
     docIdx = (docIdx + 1) % docs.length;
     render();
   };
@@ -321,7 +340,7 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
         if (e.zh) b.zh = e.zh;
         if (e.nt) b.nt = e.nt;
       });
-      if (docs[docIdx].result === result) {
+      if (docs[docIdx]?.result === result) {
         const keep = cur;
         render();
         cur = keep;

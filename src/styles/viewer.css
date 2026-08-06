@@ -79,6 +79,33 @@ body:not([data-mode=note]) .frame { margin: auto }
 body[data-mode=note] .stage { justify-content: flex-start; overflow: hidden; gap: 1rem }
 /* pan-x pan-y:單指維持原生捲動(放大後平移),雙指縮放由 JS 接管(見 viewer.ts) */
 .frame { position: relative; display: block; flex: 0 0 auto; touch-action: pan-x pan-y }
+
+/* ── 空狀態 ghost:虛線板 + 淡色假菜單,上面疊真的疊字語彙 ── */
+.ghost { display: none; margin: auto; max-width: 100%; padding: .5rem }
+body[data-empty=true] .ghost { display: block }
+body[data-empty=true] .frame { display: none }
+.ghostBoard {
+  position: relative; border: 1.5px dashed var(--edge); border-radius: 2px;
+  padding: 1.3rem 1.6rem; background: rgba(21, 28, 37, .4);
+}
+.ghostBoard pre {
+  font-family: var(--data); font-size: clamp(11px, 2.6vw, 15px); line-height: 1.9;
+  color: var(--mute); opacity: .55; user-select: none; margin: 0;
+}
+.gblk {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  font-family: var(--doc); font-weight: 700; color: var(--hot);
+  font-size: clamp(12px, 2.9vw, 17px); padding: .1em .4em; border-radius: 2px;
+  background: linear-gradient(160deg, rgba(206, 238, 255, .26), rgba(228, 244, 255, .14));
+  box-shadow: inset 0 0 0 1px rgba(65, 201, 255, .28);
+  text-shadow: 0 0 3px #FFF, 0 0 8px rgba(255, 255, 255, .85);
+  backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px);
+  pointer-events: none;
+}
+.ghostHint {
+  font-family: var(--doc); font-size: .76rem; color: var(--mute);
+  text-align: center; line-height: 1.7; margin-top: 1rem; text-wrap: balance;
+}
 .plate { position: relative; display: block; line-height: 0; box-shadow: 0 20px 56px -20px #000C }
 /* 陷阱:圖片尺寸由 JS 算好寫入 style.width,不用 max-width:100% —
    在彈性容器裡會跟容器寬互相依賴,圖片會塌掉。 */
