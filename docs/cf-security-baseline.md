@@ -103,7 +103,10 @@
 
 ### 1.8 sukemu 故意「沒有」的(有理由的取捨)
 
-- **Turnstile 在 sukemu 是關的**(`TURNSTILE_SITE_KEY` 空)。設計上「site key + secret 兩者齊備才啟用」,只設一半會 100% 斷線,故 fail-open。manemu 有開。→ 要擋 bot 濫用時再補齊兩把值。
+- **Turnstile 需兩把值齊備才啟用**(`turnstileOn = SECRET && SITE_KEY`)。只設一半會讓前端渲染不出元件、後端卻要求 token → 每次登入必定 403 且無自救路徑,故刻意 fail-open。
+  > ⚠️ **踩過的坑**:`TURNSTILE_SITE_KEY` 是 **`wrangler.jsonc` 的 var,不是 dashboard 設定**。在 dashboard 手動填了,**下次 `npm run deploy` 會用檔案內容覆蓋回空字串**,挑戰就悄悄消失。要改就改 `wrangler.jsonc` 並 commit(site key 是公開值,本來就會出現在前端 HTML,commit 進 repo 安全)。
+  > **另一個坑**:Turnstile widget 有**網域白名單**,別站的 site key 不能直接借用——要嘛新建 widget,要嘛把新網域加進既有 widget 的 hostname 清單(sukemu 與 manemu 即共用同一個 widget 與同一把 secret)。
+  > **驗證方式**:`curl -s https://<host>/api/config` 看 `turnstileSiteKey` 是不是 `null`;`null` 就是沒開。
 - **fast 模型檔位關閉**(`MODE_TOGGLE=off`):品質問題,非安全。
 - **無 rate limit(除 Turnstile 外)**:登入走 OAuth 無密碼可爆破,影響小;高流量再考慮 CF Rate Limiting。
 
