@@ -117,13 +117,17 @@ body[data-empty=true] .frame { display: none }
 }
 body.lifted .acetate { opacity: 0; transform: translateY(-1.6%) scale(1.03); filter: blur(4px) }
 
+/* 譯文一律允許溢出毛玻璃底:中譯常比原文長,裁掉就讀不到了(實測右下角被卡)。
+   可讀性靠 .txt 的白色光暈撐,深淺背景都成立;防爆版改在資料端(fs 依框幾何夾限)。 */
 .blk {
   position: absolute; display: flex; align-items: center; justify-content: center; cursor: pointer;
   padding: calc(var(--u)*.22); font-family: var(--doc); text-align: center;
-  /* 保險絲:就算模型回了離譜的 fs,溢出的字也裁在框內,不會淹掉整個畫面 */
-  overflow: hidden;
+  overflow: visible;
   transition: transform .16s cubic-bezier(.2, .8, .3, 1);
 }
+/* 溢出的字會蓋到鄰框,選取中的那則要浮到最上面才讀得完整 */
+.blk[aria-current=true] { z-index: 2 }
+.blk:hover { z-index: 1 }
 .blk .veil {
   position: absolute; inset: calc(var(--u)*-.18); border-radius: calc(var(--u)*.16);
   backdrop-filter: blur(1.4px) saturate(.55) brightness(1.16);
@@ -133,7 +137,12 @@ body.lifted .acetate { opacity: 0; transform: translateY(-1.6%) scale(1.03); fil
 }
 .blk .txt {
   position: relative; line-height: 1.3; width: 100%; font-weight: 700; color: var(--hot); word-break: break-word;
-  text-shadow: 0 0 calc(var(--u)*.14) #FFF, 0 0 calc(var(--u)*.34) rgba(255, 255, 255, .9), 0 calc(var(--u)*.04) 0 rgba(255, 255, 255, .85);
+  /* 溢出白底後光暈就是唯一的可讀性來源,加一層讓深色背景上也咬得住 */
+  text-shadow:
+    0 0 calc(var(--u)*.14) #FFF,
+    0 0 calc(var(--u)*.34) rgba(255, 255, 255, .95),
+    0 0 calc(var(--u)*.7) rgba(255, 255, 255, .55),
+    0 calc(var(--u)*.04) 0 rgba(255, 255, 255, .85);
 }
 /* 直排文字(Block.v):直書呈現,由上而下、右至左 */
 .blk.vert .txt {
