@@ -1,6 +1,6 @@
 /* 離線殼(handoff M5):導覽走網路優先(拿得到新版就用新版),
    雜湊資產與圖示走快取優先(檔名帶 hash,永不變)。/api/ 一律不快取。 */
-const CACHE = 'sukemu-shell-v1';
+const CACHE = 'sukemu-shell-v2'; /* icon 改版:升版讓舊快取汰換 */
 const SHELL = ['/', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', e => {
