@@ -52,13 +52,14 @@
 <!-- ── App(原型移植)──────────────────────── -->
 <div class="app" id="appScreen">
   <div class="bar">
-    <div class="mark"><b>sukemu</b><span>すけむ v0.2</span></div>
+    <div class="mark"><b>sukemu</b><span>すけむ v0.3</span></div>
     <div class="langs" id="langs">EN → <b>正體中文</b></div>
     <div class="spacer"></div>
     <label class="dial">縮放<input type="range" id="zoom" min="55" max="200" value="100" aria-label="圖片縮放"><b id="zoomv">100%</b></label>
     <label class="dial">強度<input type="range" id="veil" min="0" max="60" value="30" aria-label="疊層強度"><b id="veilv">.30</b></label>
     <button class="shoot" id="shoot">📷 拍照 / 上傳</button>
     <input type="file" id="file" accept="image/*" class="hidden">
+    <button class="pick" id="histBtn">紀錄</button>
     <button class="pick" id="swap">切換圖片</button>
     <div class="seg" role="group" aria-label="顯示方式">
       <button data-mode="overlay" aria-pressed="true">A 疊字<kbd>1</kbd></button>
@@ -88,6 +89,17 @@
   <div class="deck">
     <button class="hold" id="hold">按住看原圖<small>hold · 或按住 O</small></button>
     <div class="insp" id="insp"></div>
+  </div>
+</div>
+
+<!-- 翻譯紀錄(IndexedDB,只存在裝置上) -->
+<div class="histPanel hidden" id="histPanel">
+  <div class="histCard">
+    <div class="histHead">
+      <h2>翻譯紀錄</h2><span id="histCount"></span>
+      <button class="histClose" id="histClose" aria-label="關閉">✕</button>
+    </div>
+    <div class="histList" id="histList"></div>
   </div>
 </div>
 

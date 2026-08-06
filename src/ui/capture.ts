@@ -1,11 +1,15 @@
-/* 拍照 / 上傳 / 貼上 → P1(視覺趟)→ 疊回原圖 → P2(在地化)就地更新。
+/* 拍照 / 上傳 / 貼上 → 查本機紀錄(hash 去重,翻過不再打 API)
+   → P1(視覺趟)→ 疊回原圖 → 存 IndexedDB → P2(在地化)就地更新並回存。
    進度分段(handoff §5):上傳中 → 讀取版面・翻譯 → 在地化。
    影像在裝置端縮到長邊 2048 再上傳;顯示用原圖 object URL,座標是正規化百分比所以不受影響。 */
 
 import { api, ApiError } from '../api';
+import { docStore, recordIds } from '../db';
+import { refreshHistory } from './history';
 import type { Viewer } from './viewer';
 
 const MAX_EDGE = 2048;
+const THUMB_W = 240;
 const $ = (id: string) => document.getElementById(id)!;
 
 export function initCapture(viewer: Viewer) {
@@ -13,19 +17,24 @@ export function initCapture(viewer: Viewer) {
   const progress = $('progress');
   const progressText = $('progressText');
   let busy = false;
-  let failTimer: ReturnType<typeof setTimeout>;
+  let hideTimer: ReturnType<typeof setTimeout>;
 
   const show = (msg: string) => {
-    clearTimeout(failTimer);
+    clearTimeout(hideTimer);
     progress.dataset.err = 'false';
     progressText.textContent = msg;
     progress.classList.remove('hidden');
   };
+  const info = (msg: string) => {
+    show(msg);
+    hideTimer = setTimeout(() => progress.classList.add('hidden'), 2600);
+  };
   const fail = (msg: string) => {
+    clearTimeout(hideTimer);
     progress.dataset.err = 'true';
     progressText.textContent = msg;
     progress.classList.remove('hidden');
-    failTimer = setTimeout(() => progress.classList.add('hidden'), 5000);
+    hideTimer = setTimeout(() => progress.classList.add('hidden'), 5000);
   };
   const done = () => progress.classList.add('hidden');
 
@@ -47,7 +56,23 @@ export function initCapture(viewer: Viewer) {
     busy = true;
     try {
       show('上傳中');
-      const { b64, mime, url } = await prep(file);
+      const { b64, mime, url, blob, thumb } = await prep(file);
+
+      // 同一張圖翻過就直接開紀錄,不重新上傳翻譯
+      const hash = await sha256(blob);
+      try {
+        const hit = await docStore.findByHash(hash);
+        if (hit) {
+          const result = { name: hit.name, lang: hit.lang, blocks: hit.blocks };
+          recordIds.set(result, hit.id!);
+          viewer.addDoc({ src: url, result });
+          info('這張已翻過,直接從紀錄開啟');
+          return;
+        }
+      } catch {
+        /* IndexedDB 不可用時照常走翻譯 */
+      }
+
       show('讀取版面・翻譯');
       const result = await api.p1(b64, mime, name);
       if (!result.blocks.length) {
@@ -55,9 +80,29 @@ export function initCapture(viewer: Viewer) {
         return;
       }
       viewer.addDoc({ src: url, result });
+
+      // P1 一成功就先存,P2 失敗也留得住結果
+      let id: number | undefined;
+      try {
+        id = await docStore.save({
+          hash,
+          at: new Date().toISOString(),
+          name: result.name,
+          lang: result.lang,
+          blocks: result.blocks,
+          image: blob,
+          thumb,
+        });
+        recordIds.set(result, id);
+        refreshHistory();
+      } catch {
+        /* 存不進去(私密模式等)不影響翻譯流程 */
+      }
+
       show('在地化');
       const edits = await api.p2(result.lang, result.blocks);
       viewer.applyEdits(result, edits);
+      if (id != null) docStore.updateBlocks(id, result.blocks).catch(() => {});
       done();
     } catch (ex) {
       if (ex instanceof ApiError && ex.status === 401) {
@@ -71,7 +116,14 @@ export function initCapture(viewer: Viewer) {
   }
 }
 
-async function prep(file: File): Promise<{ b64: string; mime: string; url: string }> {
+async function sha256(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function prep(
+  file: File,
+): Promise<{ b64: string; mime: string; url: string; blob: Blob; thumb: Blob }> {
   const url = URL.createObjectURL(file);
   const img = new Image();
   await new Promise((res, rej) => {
@@ -94,11 +146,20 @@ async function prep(file: File): Promise<{ b64: string; mime: string; url: strin
     mime = 'image/jpeg';
   }
 
+  const tc = document.createElement('canvas');
+  const ts = THUMB_W / img.naturalWidth;
+  tc.width = THUMB_W;
+  tc.height = Math.max(1, Math.round(img.naturalHeight * ts));
+  tc.getContext('2d')!.drawImage(img, 0, 0, tc.width, tc.height);
+  const thumb = await new Promise<Blob>((res, rej) =>
+    tc.toBlob(b => (b ? res(b) : rej(new Error('縮圖產生失敗'))), 'image/jpeg', 0.8),
+  );
+
   const b64 = await new Promise<string>((res, rej) => {
     const r = new FileReader();
     r.onload = () => res((r.result as string).split(',')[1]);
     r.onerror = () => rej(new Error('影像編碼失敗'));
     r.readAsDataURL(blob);
   });
-  return { b64, mime, url };
+  return { b64, mime, url, blob, thumb };
 }

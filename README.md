@@ -40,6 +40,7 @@ npm run dev          # vite dev server,/api 代理到 8787
   - `POST /api/p1` — 視覺趟:Gemini REST `generateContent`,media_resolution HIGH,回座標 + 原文 + 初譯(結構化輸出)
   - `POST /api/p2` — 文字趟:只餵 P1 的 JSON,在地化 + 譯註;失敗重試不用重付影像 token
 - **資料契約** `src/types.ts`(`Block` / `Result`),欄位名前後端共用,不可改;座標一律正規化百分比;`v?: boolean` 標直排文字(前端以 `writing-mode: vertical-rl` 呈現)
+- **結果保存** `src/db.ts` 裝置端 IndexedDB(§9:譯文不落地伺服器):每筆存壓縮影像 + 縮圖 + blocks + 影像 hash。上傳前先以 hash 查紀錄,**同一張圖翻過就直接開啟、不重打 API**;「紀錄」面板可瀏覽、重開、刪除;譯文編輯自動回存
 - **PWA**(M5)`public/manifest.json` + `public/sw.js`(離線殼:導覽網路優先、雜湊資產快取優先、`/api/` 不快取)+ `public/icons/`;安裝後 standalone 隱藏網址列。登入頁有安裝按鈕(Android/桌面)與 iOS 加入主畫面指引
 
 ## 視覺紀律
@@ -49,6 +50,6 @@ npm run dev          # vite dev server,/api 代理到 8787
 ## 尚未做(依 handoff 里程碑)
 
 - OpenCC `cn→twp` 收尾(目前靠 P2 prompt 保證台灣正體)
-- 結果保存 IndexedDB、Durable Object 配額、R2 影像暫存生命週期(目前影像不落地,直接 inline 給 Gemini)
+- Durable Object 配額、R2 影像暫存生命週期(目前影像不落地,直接 inline 給 Gemini)
 - Google OIDC + Turnstile(M4)、分塊高解析與 Meta 注入(M6)
 - 直排的透視變形仍用矩形框(§11 quad 待做)
