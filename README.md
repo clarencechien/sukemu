@@ -9,6 +9,8 @@
 | [`docs/handoff.md`](docs/handoff.md) | 產品規格與決策(來源文件) |
 | [`docs/mockup/acetate-lens.html`](docs/mockup/acetate-lens.html) | 互動原型 = 互動與視覺的規格書 |
 | [`docs/oidc-setup.md`](docs/oidc-setup.md) | 一次性部署設定(OAuth、secrets、網域與安全、疑難排解) |
+| [`docs/oidc-setup.md`](docs/oidc-setup.md) | 一次性部署設定(OAuth、secrets、網域與安全) |
+| [`docs/cf-security-baseline.md`](docs/cf-security-baseline.md) | **安全基線**:新專案從這開始;控制清單、正式/demo 標準、audit 紀錄 |
 | [`docs/config.md`](docs/config.md) | 平常在調的旋鈕:名單、配額、模型檔位、價格 |
 | [`docs/adr/`](docs/adr/) | 架構決策紀錄 |
 
