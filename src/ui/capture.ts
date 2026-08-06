@@ -6,7 +6,7 @@
 import { api, ApiError } from '../api';
 import { docStore, recordIds } from '../db';
 import { refreshHistory } from './history';
-import { refreshUsage } from './login';
+import { isAuthed, refreshUsage } from './login';
 import { modelMode } from './mode';
 import type { Viewer } from './viewer';
 
@@ -40,7 +40,16 @@ export function initCapture(viewer: Viewer) {
   };
   const done = () => progress.classList.add('hidden');
 
-  ($('shoot') as HTMLButtonElement).onclick = () => fileEl.click();
+  /** 未登入時不要先開檔案選擇器再失敗——手機挑一張照片要好幾下,白費工 */
+  const needLogin = () => {
+    if (isAuthed()) return false;
+    fail('這是介面預覽 — 請先登入才能翻譯');
+    return true;
+  };
+
+  ($('shoot') as HTMLButtonElement).onclick = () => {
+    if (!needLogin()) fileEl.click();
+  };
   fileEl.onchange = () => {
     const f = fileEl.files?.[0];
     if (f) handle(f, f.name);
@@ -50,7 +59,7 @@ export function initCapture(viewer: Viewer) {
     if (document.body.dataset.screen !== 'app') return;
     const item = [...(e.clipboardData?.items ?? [])].find(i => i.type.startsWith('image/'));
     const f = item?.getAsFile();
-    if (f) handle(f, '貼上的圖片');
+    if (f && !needLogin()) handle(f, '貼上的圖片');
   });
 
   async function handle(file: File, name: string) {
@@ -113,7 +122,9 @@ export function initCapture(viewer: Viewer) {
       refreshUsage();
     } catch (ex) {
       if (ex instanceof ApiError && ex.status === 401) {
-        fail('示範模式無法翻譯 — 請回登入頁以受邀 Email 登入');
+        // 走到這裡代表 session 中途失效(按鈕已擋掉未登入的情況)
+        document.body.dataset.auth = 'out';
+        fail('登入已失效 — 請按左上「← 登入」重新登入');
       } else {
         fail(ex instanceof Error ? ex.message : '處理失敗,請再試一次');
       }

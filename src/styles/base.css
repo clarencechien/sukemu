@@ -13,3 +13,6 @@ button { font-family: inherit }
 /* 畫面切換:登入前 / App */
 body[data-screen=login] .app { display: none }
 body[data-screen=app] .login { display: none }
+
+/* 已登入就不需要回登入頁的按鈕與「介面預覽」提醒 */
+body[data-auth=in] :is(#loginBtn, .ghostAuth) { display: none }
