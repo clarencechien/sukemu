@@ -29,7 +29,17 @@ npm run deploy                                # build + wrangler deploy
 
 ## 價格(TWD)
 
-Worker 用 Gemini 回傳的實際 token 數即時估算:翻完提示「本次約 NT$X」、`/admin` 看每人當日累計。以預設單價(input $0.30/M、output 含 thinking $2.50/M、匯率 31.5)估:**簡單招牌 ≈ NT$0.2、一般菜單 ≈ NT$0.5、複雜資訊圖 ≈ NT$1.6**。成本八成以上在 P1 的輸出+thinking,影像輸入很便宜。單價/匯率在 vars,詳見 [`docs/oidc-setup.md`](docs/oidc-setup.md) §6。
+Worker 用 Gemini 回傳的實際 token 數即時估算:翻完提示「本次約 NT$X」、`/admin` 看每人當日累計。單價表按模型內建,**換 `GEMINI_MODEL` 自動換價**(可用 var `MODEL_PRICES` 覆寫)。
+
+以匯率 31.5 估算,一張的成本:
+
+| 情境 | `gemini-3.5-flash`(預設) | `gemini-3.6-flash` | `gemini-3.5-flash-lite` |
+|---|---|---|---|
+| 簡單招牌(2–3 塊) | NT$0.76 | NT$0.56 | NT$0.20 |
+| 一般菜單(~11 塊) | NT$1.89 | NT$1.37 | NT$0.51 |
+| 複雜資訊圖(30+ 塊) | NT$5.43 | NT$3.86 | NT$1.48 |
+
+**P1 佔 80–92% 的成本,其中八成以上是輸出+thinking**,影像輸入不到一成。換模型前先用 `scripts/ab-models.mjs` 跑同一張圖比框準度與成本。細節見 [`docs/oidc-setup.md`](docs/oidc-setup.md) §6。
 
 ## 本機開發
 

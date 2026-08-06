@@ -40,8 +40,8 @@ export interface Env {
   DAILY_IMAGES_LIMIT?: string;
   // 安全與計價
   CANONICAL_HOST?: string;
-  PRICE_IN_USD_PER_M?: string;
-  PRICE_OUT_USD_PER_M?: string;
+  /** 覆寫/補充模型單價表:{"model-id":[輸入USD/M, 輸出USD/M]} */
+  MODEL_PRICES?: string;
   USD_TWD?: string;
 }
 
@@ -241,8 +241,8 @@ async function api(
       return bad(`今日額度已用完(${u.count}/${user.limitImages} 張),台灣時間早上 8 點重置`, 429);
     }
 
-    const { lang, blocks, usage } = await runP1(env, image, mime);
-    const twd = estCostTwd(env, usage);
+    const { lang, blocks, usage, model } = await runP1(env, image, mime);
+    const twd = estCostTwd(env, model, usage);
     // 成功才計費(失敗不扣額度)
     ctx.waitUntil(
       quotaStub(env, email).fetch('https://do/add', {
@@ -250,7 +250,7 @@ async function api(
         body: JSON.stringify({ images: 1, ...usage, costTwd: twd }),
       }),
     );
-    return json({ ok: true, result: { name: name || 'photo', lang, blocks }, usage: { ...usage, twd } });
+    return json({ ok: true, result: { name: name || 'photo', lang, blocks }, usage: { ...usage, twd, model } });
   }
 
   if (path === '/api/p2' && req.method === 'POST') {
@@ -259,15 +259,15 @@ async function api(
       blocks?: { en: string; zh: string }[];
     };
     if (!Array.isArray(blocks) || !blocks.length) return bad('缺少文字塊');
-    const { edits, usage } = await runP2(env, lang || '??', blocks);
-    const twd = estCostTwd(env, usage);
+    const { edits, usage, model } = await runP2(env, lang || '??', blocks);
+    const twd = estCostTwd(env, model, usage);
     ctx.waitUntil(
       quotaStub(env, email).fetch('https://do/add', {
         method: 'POST',
         body: JSON.stringify({ images: 0, ...usage, costTwd: twd }),
       }),
     );
-    return json({ ok: true, edits, usage: { ...usage, twd } });
+    return json({ ok: true, edits, usage: { ...usage, twd, model } });
   }
 
   return bad('不存在的 API', 404);

@@ -33,11 +33,9 @@
     "CANONICAL_HOST": "",
     // Turnstile site key 是公開值;TURNSTILE_SECRET 走 secret。兩者都不設 → 登入不驗
     "TURNSTILE_SITE_KEY": "",
-    // 計價(估算用):美元/百萬 token 單價 × 匯率 → 每張成本 TWD,顯示在 /admin 與完成提示
-    // 預設值是 Gemini 2.5 Flash 檔位(input $0.30/M、output 含 thinking $2.50/M),
-    // 模型換檔請對照官方價目表更新
-    "PRICE_IN_USD_PER_M": "0.30",
-    "PRICE_OUT_USD_PER_M": "2.50",
+    // 計價:單價表按模型內建在 worker/gemini.ts,換 GEMINI_MODEL 會自動換價。
+    // 官方調價或出新模型時,用 MODEL_PRICES 覆寫即可(不必改碼):
+    //   "MODEL_PRICES": "{\"gemini-3.6-flash\":[1.5,7.5]}"   ← [輸入, 輸出] USD/百萬 token
     "USD_TWD": "31.5"
   },
   "observability": {
