@@ -17,17 +17,31 @@ export const b64u = {
   decStr: (s: string) => new TextDecoder().decode(b64u.dec(s)),
 };
 
-const secret = (env: Env) => env.SESSION_SECRET || 'dev-insecure-secret';
+/* SESSION_SECRET 沒設就退回這把眾所皆知的字串——夠開發用,但正式環境用它
+   等於把 session 簽章的鑰匙公開:任何人都能偽造 sk_session(含 admin 的
+   clarence.chien@gmail.com 一路進 /admin)。所以「正式環境=已設 OIDC」時,
+   缺 secret 或還在用這把 dev 值一律「關門」:sign 直接報錯、verify 一律當未登入。
+   寧可全站登入失敗、逼運維補上 secret,也不要靜默放行偽造 session。 */
+const DEV_SECRET = 'dev-insecure-secret';
+const secret = (env: Env) => env.SESSION_SECRET || DEV_SECRET;
+/** 正式環境(已設 GOOGLE_CLIENT_ID)卻缺少獨立 SESSION_SECRET → 危險組態 */
+const prodSecretMissing = (env: Env) =>
+  !!env.GOOGLE_CLIENT_ID && (!env.SESSION_SECRET || env.SESSION_SECRET === DEV_SECRET);
 
 function hmacKey(s: string) {
   return crypto.subtle.importKey('raw', enc.encode(s), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
 export async function sign(payload: object, env: Env): Promise<string> {
+  if (prodSecretMissing(env)) {
+    throw new Error('SESSION_SECRET 未設定(正式環境必設):npx wrangler secret put SESSION_SECRET');
+  }
   const body = b64u.encStr(JSON.stringify(payload));
   const sig = b64u.enc(await crypto.subtle.sign('HMAC', await hmacKey(secret(env)), enc.encode(body)));
   return `${body}.${sig}`;
 }
 export async function verify(token: string | null, env: Env): Promise<Record<string, any> | null> {
+  // 正式環境缺 secret:所有 session / OAuth state 一律視為無效,不給偽造任何機會
+  if (prodSecretMissing(env)) return null;
   if (!token || !token.includes('.')) return null;
   const [body, sig] = token.split('.');
   try {
