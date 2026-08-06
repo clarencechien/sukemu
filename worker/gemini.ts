@@ -45,8 +45,9 @@ export const P2_SCHEMA = {
 };
 
 export const P1_PROMPT = `你是圖片版面分析與翻譯引擎。找出圖中所有非中文的文字塊,對每一塊回傳:
-- x, y, w, h:文字塊外框,相對整張圖的正規化百分比(0–100),x, y 為左上角
-- fs:建議字級,單位 u(u = 圖片寬度的 1/100),約等於該塊單行字高
+- x, y, w, h:文字塊外框。**一律用相對整張圖的百分比,0–100 的數字**,x, y 為左上角,
+  w, h 為寬高。**不要用 0–1000 標註、不要用像素、不要用 0–1 小數、不要回傳 x2/y2**
+- fs:建議字級,單位 u(u = 圖片寬度的 1/100),約等於該塊單行字高;一般照片多在 1–6 之間
 - c:版面信心 0–1(座標與斷塊是否可靠;傾斜、變形、被遮蔽時調低)
 - en:該塊原文(合併為一行)
 - zh:台灣正體中文初譯
@@ -154,9 +155,61 @@ export function estCostTwd(env: Env, model: string, usage: TokenUsage): number {
   return +(((usage.inTok * pin + usage.outTok * pout) / 1e6) * rate).toFixed(4);
 }
 
-const clampPct = (n: unknown) => Math.min(100, Math.max(0, Number(n) || 0));
+const clampPct = (n: number) => Math.min(100, Math.max(0, n || 0));
 
-export async function runP1(env: Env, image: string, mime: string, mode: ModelMode) {
+/* 座標規格防呆:prompt 要求 0–100 百分比,但模型(尤其 lite 檔)常掉回
+   訓練慣例——Gemini 空間標註是 0–1000,也見過像素與 0–1 小數。
+   直接夾到 100 會把框撐成滿版、fs 放大幾百倍(實測快速模式整版橘色)。
+   這裡從數值範圍推回原始規格再換算;iw/ih 是上傳影像的實際尺寸(像素模式要用)。 */
+export function normalizeBlocks(
+  raw: Record<string, unknown>[],
+  iw?: number,
+  ih?: number,
+): { blocks: { x: number; y: number; w: number; h: number; fs: number; c: number; en: string; zh: string; v?: true }[]; scaleApplied: string | null } {
+  const n = (v: unknown) => Number(v) || 0;
+  let extent = 0;
+  for (const b of raw) extent = Math.max(extent, n(b.x) + n(b.w), n(b.y) + n(b.h));
+
+  let sx = 1;
+  let sy = 1;
+  let scaleApplied: string | null = null;
+  if (extent > 120) {
+    if (iw && ih && extent > 1050) {
+      sx = iw / 100; sy = ih / 100; scaleApplied = 'px';        // 像素 → %
+    } else {
+      sx = 10; sy = 10; scaleApplied = '0-1000';                // 0–1000 → %
+    }
+  } else if (extent > 0 && extent <= 1.2) {
+    sx = 0.01; sy = 0.01; scaleApplied = '0-1';                 // 0–1 小數 → %
+  }
+
+  const ar = iw && ih ? ih / iw : 1; // fs 上限要用:框高 h% 換成 u(寬基準)= h × ih/iw
+  const blocks = raw.map(b => {
+    const v = b.v === true;
+    const w = clampPct(n(b.w) / sx);
+    const h = clampPct(n(b.h) / sy);
+    // fs 與 x 同一個寬基準單位,套同一個換算;再用外框幾何夾住:
+    // 橫排單行字高不會超過框高(h×ih/iw u),直排單字寬不會超過框寬(w u)
+    let fs = n(b.fs) / sx;
+    const cap = Math.max(0.8, v ? w : h * ar);
+    if (!Number.isFinite(fs) || fs <= 0) fs = cap * 0.8;
+    fs = Math.max(0.6, Math.min(fs, cap, 14));
+    return {
+      x: +clampPct(n(b.x) / sx).toFixed(2),
+      y: +clampPct(n(b.y) / sy).toFixed(2),
+      w: +w.toFixed(2),
+      h: +h.toFixed(2),
+      fs: +fs.toFixed(2),
+      c: Math.min(1, Math.max(0, n(b.c))),
+      en: String(b.en ?? ''),
+      zh: String(b.zh ?? ''),
+      ...(v ? { v: true as const } : {}),
+    };
+  });
+  return { blocks, scaleApplied };
+}
+
+export async function runP1(env: Env, image: string, mime: string, mode: ModelMode, iw?: number, ih?: number) {
   const model = modelFor(env, mode, 'p1');
   const { data, usage } = await generateJSON(
     env,
@@ -166,18 +219,8 @@ export async function runP1(env: Env, image: string, mime: string, mode: ModelMo
     true,
   );
   const out = data as { lang?: string; blocks?: Record<string, unknown>[] };
-
-  const blocks = (out.blocks ?? []).map(b => ({
-    x: clampPct(b.x),
-    y: clampPct(b.y),
-    w: clampPct(b.w),
-    h: clampPct(b.h),
-    fs: Number(b.fs) || 1.6,
-    c: Math.min(1, Math.max(0, Number(b.c) || 0)),
-    en: String(b.en ?? ''),
-    zh: String(b.zh ?? ''),
-    ...(b.v === true ? { v: true } : {}),
-  }));
+  const { blocks, scaleApplied } = normalizeBlocks(out.blocks ?? [], iw, ih);
+  if (scaleApplied) console.log(`[p1] ${model} 座標不是 0–100 百分比,已按 ${scaleApplied} 規格換算`);
   return { lang: String(out.lang ?? '??').toUpperCase(), blocks, usage, model, mode };
 }
 

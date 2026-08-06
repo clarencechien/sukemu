@@ -93,6 +93,8 @@ body.lifted .acetate { opacity: 0; transform: translateY(-1.6%) scale(1.03); fil
 .blk {
   position: absolute; display: flex; align-items: center; justify-content: center; cursor: pointer;
   padding: calc(var(--u)*.22); font-family: var(--doc); text-align: center;
+  /* 保險絲:就算模型回了離譜的 fs,溢出的字也裁在框內,不會淹掉整個畫面 */
+  overflow: hidden;
   transition: transform .16s cubic-bezier(.2, .8, .3, 1);
 }
 .blk .veil {

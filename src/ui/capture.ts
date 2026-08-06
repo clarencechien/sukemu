@@ -58,7 +58,7 @@ export function initCapture(viewer: Viewer) {
     busy = true;
     try {
       show('上傳中');
-      const { b64, mime, url, blob, thumb } = await prep(file);
+      const { b64, mime, url, blob, thumb, iw, ih } = await prep(file);
       const mode = modelMode();
 
       // 同一張圖 + 同一檔位翻過就直接開紀錄,不重新上傳翻譯
@@ -77,7 +77,7 @@ export function initCapture(viewer: Viewer) {
       }
 
       show(mode === 'accurate' ? '讀取版面・翻譯(精準)' : '讀取版面・翻譯');
-      const { result, usage: u1 } = await api.p1(b64, mime, name, mode);
+      const { result, usage: u1 } = await api.p1(b64, mime, name, mode, iw, ih);
       if (!result.blocks.length) {
         fail('沒有偵測到可翻譯的文字');
         return;
@@ -130,7 +130,7 @@ async function sha256(blob: Blob): Promise<string> {
 
 async function prep(
   file: File,
-): Promise<{ b64: string; mime: string; url: string; blob: Blob; thumb: Blob }> {
+): Promise<{ b64: string; mime: string; url: string; blob: Blob; thumb: Blob; iw: number; ih: number }> {
   const url = URL.createObjectURL(file);
   const img = new Image();
   await new Promise((res, rej) => {
@@ -142,6 +142,8 @@ async function prep(
   const scale = Math.min(1, MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
   let blob: Blob = file;
   let mime = file.type || 'image/jpeg';
+  let iw = img.naturalWidth;
+  let ih = img.naturalHeight;
   if (scale < 1 || !['image/jpeg', 'image/png', 'image/webp'].includes(mime)) {
     const cv = document.createElement('canvas');
     cv.width = Math.round(img.naturalWidth * scale);
@@ -151,6 +153,8 @@ async function prep(
       cv.toBlob(b => (b ? res(b) : rej(new Error('影像壓縮失敗'))), 'image/jpeg', 0.92),
     );
     mime = 'image/jpeg';
+    iw = cv.width;
+    ih = cv.height;
   }
 
   const tc = document.createElement('canvas');
@@ -168,5 +172,5 @@ async function prep(
     r.onerror = () => rej(new Error('影像編碼失敗'));
     r.readAsDataURL(blob);
   });
-  return { b64, mime, url, blob, thumb };
+  return { b64, mime, url, blob, thumb, iw, ih };
 }

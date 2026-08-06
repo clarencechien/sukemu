@@ -233,11 +233,14 @@ async function api(
   }
 
   if (path === '/api/p1' && req.method === 'POST') {
-    const { image, mime, name, modelMode } = (await req.json().catch(() => ({}))) as {
+    const { image, mime, name, modelMode, iw, ih } = (await req.json().catch(() => ({}))) as {
       image?: string;
       mime?: string;
       name?: string;
       modelMode?: string;
+      /** 上傳影像的像素尺寸:座標規格防呆(像素→百分比)要用 */
+      iw?: number;
+      ih?: number;
     };
     if (!image || !mime?.startsWith('image/')) return bad('缺少影像資料');
     if (image.length > MAX_IMAGE_B64) return bad('影像過大,請縮小後再試', 413);
@@ -248,7 +251,10 @@ async function api(
       return bad(`今日額度已用完(${u.count}/${user.limitImages} 張),台灣時間早上 8 點重置`, 429);
     }
 
-    const { lang, blocks, usage, model, mode } = await runP1(env, image, mime, resolveMode(env, modelMode));
+    const { lang, blocks, usage, model, mode } = await runP1(
+      env, image, mime, resolveMode(env, modelMode),
+      Number(iw) || undefined, Number(ih) || undefined,
+    );
     const twd = estCostTwd(env, model, usage);
     // 成功才計費(失敗不扣額度)
     ctx.waitUntil(

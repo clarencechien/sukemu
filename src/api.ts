@@ -45,8 +45,14 @@ export const api = {
   me: (): Promise<Me> => req('/api/me'),
   login: (email: string): Promise<{ email: string }> => post('/api/login', { email }),
   logout: (): Promise<void> => post('/api/logout', {}),
-  p1: (image: string, mime: string, name: string, modelMode: ModelMode): Promise<{ result: Result; usage?: ApiUsage }> =>
-    post('/api/p1', { image, mime, name, modelMode }),
+  p1: (
+    image: string,
+    mime: string,
+    name: string,
+    modelMode: ModelMode,
+    iw: number,
+    ih: number,
+  ): Promise<{ result: Result; usage?: ApiUsage }> => post('/api/p1', { image, mime, name, modelMode, iw, ih }),
   p2: (lang: string, blocks: Block[], modelMode: ModelMode): Promise<{ edits: P2Edit[]; usage?: ApiUsage }> =>
     post('/api/p2', { lang, blocks: blocks.map(({ en, zh }) => ({ en, zh })), modelMode }),
 };
