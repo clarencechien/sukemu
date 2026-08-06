@@ -40,8 +40,12 @@ const post = (path: string, body: unknown) =>
   });
 
 export const api = {
-  config: (): Promise<{ mode: 'oidc' | 'dev'; turnstileSiteKey: string | null; defaultModelMode: ModelMode }> =>
-    req('/api/config'),
+  config: (): Promise<{
+    mode: 'oidc' | 'dev';
+    turnstileSiteKey: string | null;
+    defaultModelMode: ModelMode;
+    allowModeToggle: boolean;
+  }> => req('/api/config'),
   me: (): Promise<Me> => req('/api/me'),
   login: (email: string): Promise<{ email: string }> => post('/api/login', { email }),
   logout: (): Promise<void> => post('/api/logout', {}),

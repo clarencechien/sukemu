@@ -15,7 +15,7 @@ import {
   verifyGoogleIdToken,
   type UserInfo,
 } from './auth';
-import { estCostTwd, resolveMode, runP1, runP2 } from './gemini';
+import { estCostTwd, modeToggleEnabled, resolveMode, runP1, runP2 } from './gemini';
 import { handleAdmin } from './admin';
 import type { Usage } from './quota';
 export { QuotaCounter } from './quota';
@@ -25,8 +25,10 @@ export interface Env {
   R2: R2Bucket;
   QUOTA: DurableObjectNamespace;
   GEMINI_API_KEY: string;
-  // 模型檔位(ADR 0001):fast 省錢優先(預設)、accurate 品質優先
+  // 模型檔位(ADR 0001):fast 省錢、accurate 品質
   DEFAULT_MODE?: string;
+  /** "off" = 鎖定預設檔位:UI 隱藏切換鈕、API 無視 modelMode */
+  MODE_TOGGLE?: string;
   FAST_MODEL?: string;
   ACCURATE_MODEL?: string;
   /** P2 單獨覆寫(可不設,預設同該模式的主模型) */
@@ -95,6 +97,7 @@ export default {
         mode: env.GOOGLE_CLIENT_ID ? 'oidc' : 'dev',
         turnstileSiteKey: env.TURNSTILE_SITE_KEY || null,
         defaultModelMode: resolveMode(env),
+        allowModeToggle: modeToggleEnabled(env),
       });
     }
 

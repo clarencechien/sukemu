@@ -20,12 +20,13 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["QuotaCounter"] }],
   "vars": {
-    // 模型檔位(決策見 docs/adr/0001-fast-accurate-model-modes.md):
-    //   fast     省錢優先,一般菜單 ≈ NT$0.51 ← 預設
-    //   accurate 品質優先,一般菜單 ≈ NT$1.37
-    // 框準度不夠就把 DEFAULT_MODE 改成 "accurate" 重新部署;
-    // 前端也有切換鈕,單張可臨時改用精準模式重翻。
-    "DEFAULT_MODE": "fast",
+    // 模型檔位(決策見 docs/adr/0001-fast-accurate-model-modes.md 及其後記):
+    //   fast     省錢(flash-lite),一般菜單 ≈ NT$0.51
+    //   accurate 品質(3.6-flash),一般菜單 ≈ NT$1.37 ← 預設
+    // 2026-08-06 實測 fast 框漂移 + 多語標籤譯文串接,不合格 → 預設精準、
+    // MODE_TOGGLE off(UI 隱藏切換鈕、API 鎖定預設)。lite 修好後把兩行改回即可。
+    "DEFAULT_MODE": "accurate",
+    "MODE_TOGGLE": "off",
     "FAST_MODEL": "gemini-3.5-flash-lite",
     "ACCURATE_MODEL": "gemini-3.6-flash",
     // P2 只佔 8–19% 成本,要單獨調就設這兩個(不設 = 同該模式的主模型)

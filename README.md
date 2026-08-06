@@ -35,14 +35,12 @@ npm run deploy                                # build + wrangler deploy
 
 ## 模型檔位與價格(TWD)
 
-兩個模式,模型寫在 `wrangler.jsonc`,**預設快速**(決策見 [ADR 0001](docs/adr/0001-fast-accurate-model-modes.md)):
+兩個模式,模型寫在 `wrangler.jsonc`(決策與實測數據見 [ADR 0001](docs/adr/0001-fast-accurate-model-modes.md)):
 
-| 模式 | 模型 | 簡單招牌 | 一般菜單 | 複雜資訊圖 |
-|---|---|---|---|---|
-| ⚡ **快速**(預設) | `gemini-3.5-flash-lite` | NT$0.20 | NT$0.51 | NT$1.48 |
-| ⚖ 精準 | `gemini-3.6-flash` | NT$0.56 | NT$1.37 | NT$3.86 |
-
-全域切換改 `DEFAULT_MODE`;App 頂列也有檔位鈕,單張可切精準重翻(切換後同一張圖不吃舊快取)。
+| 模式 | 模型 | 簡單招牌 | 一般菜單 | 複雜資訊圖 | 現況 |
+|---|---|---|---|---|---|
+| ⚖ **精準** | `gemini-3.6-flash` | NT$0.56 | NT$1.37 | NT$3.86 | **預設** |
+| ⚡ 快速 | `gemini-3.5-flash-lite` | NT$0.20 | NT$0.51 | NT$1.48 | 停用(實測框漂移,`MODE_TOGGLE=off`) |
 
 Worker 用 Gemini 回傳的實際 token 數即時估算:翻完提示「本次約 NT$X」、`/admin` 看每人當日累計。單價表按模型內建,**換模型自動換價**(可用 var `MODEL_PRICES` 覆寫)。**P1 佔 80–92% 的成本,其中八成以上是輸出+thinking**,影像輸入不到一成。換檔位前先用 `scripts/ab-models.mjs` 跑同一張圖比框準度與成本。細節見 [`docs/config.md`](docs/config.md)。
 

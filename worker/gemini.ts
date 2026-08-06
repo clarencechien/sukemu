@@ -68,11 +68,17 @@ export const P2_PROMPT = `你是台灣在地化編輯。輸入是一張圖片的
 
 export type TokenUsage = { inTok: number; outTok: number };
 
-/** 模型檔位(ADR 0001):fast 省錢優先(預設)、accurate 品質優先 */
+/** 模型檔位(ADR 0001 + 後記):fast 省錢、accurate 品質。
+    2026-08-06 實測 fast(flash-lite)框漂移 + 多語標籤譯文串接,不合格——
+    MODE_TOGGLE=off 時無視 client 要求、一律走預設檔位(UI 同步隱藏切換鈕)。 */
 export type ModelMode = 'fast' | 'accurate';
 
-export const resolveMode = (env: Env, requested?: string): ModelMode =>
-  (requested || env.DEFAULT_MODE) === 'accurate' ? 'accurate' : 'fast';
+export const modeToggleEnabled = (env: Env) => env.MODE_TOGGLE !== 'off';
+
+export const resolveMode = (env: Env, requested?: string): ModelMode => {
+  const pick = modeToggleEnabled(env) && requested ? requested : env.DEFAULT_MODE;
+  return pick === 'fast' ? 'fast' : 'accurate';
+};
 
 /** 模式 → 模型。P2 可用 *_MODEL_P2 單獨覆寫(P2 只佔 8–19% 成本,值得獨立調) */
 function modelFor(env: Env, mode: ModelMode, pass: 'p1' | 'p2'): string {
