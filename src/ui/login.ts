@@ -32,9 +32,16 @@ export function initLogin() {
   const err = $('loginErr');
   let oidc = false;
 
+  const q = new URLSearchParams(location.search);
   // OIDC 回跳:不在名單 → 顯示等候名單卡
-  if (new URLSearchParams(location.search).get('waitlist') === '1') {
+  if (q.get('waitlist') === '1') {
     waitNotice.classList.remove('hidden');
+    history.replaceState(null, '', '/');
+  }
+  // Turnstile 沒過 → 回跳帶 err,顯示可重試的訊息(不要讓使用者停在裸 403)
+  if (q.get('err') === 'challenge') {
+    err.textContent = '人機驗證沒有通過,請稍候一下再按一次登入。';
+    err.classList.remove('hidden');
     history.replaceState(null, '', '/');
   }
 
@@ -46,13 +53,7 @@ export function initLogin() {
     form.method = 'POST';
     form.action = '/auth/login';
     btn.textContent = '使用 Google 登入';
-    if (cfg.turnstileSiteKey) {
-      $('tsWidget').innerHTML = `<div class="cf-turnstile" data-sitekey="${cfg.turnstileSiteKey}" data-theme="dark"></div>`;
-      const s = document.createElement('script');
-      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-      s.async = true;
-      document.head.appendChild(s);
-    }
+    if (cfg.turnstileSiteKey) mountTurnstile(cfg.turnstileSiteKey, btn);
   }).catch(() => {});
 
   form.addEventListener('submit', async e => {
@@ -81,4 +82,36 @@ export function initLogin() {
 
   // 已有有效 session 就直接進 App
   api.me().then(applyMe).catch(() => {});
+}
+
+/* Turnstile:token 到手前先擋住送出,免得使用者在手機上先按了按鈕
+   (行動網路常拿到需要互動的挑戰,桌面多半無感通過)→ 送出空 token → 403。
+   腳本載不到或挑戰卡住時,10 秒後仍放行,由伺服器決定並導回帶訊息的登入頁,
+   不要讓按鈕永遠鎖死。 */
+function mountTurnstile(siteKey: string, btn: HTMLButtonElement) {
+  const label = btn.textContent ?? '使用 Google 登入';
+  btn.disabled = true;
+  btn.textContent = '驗證中…';
+  const release = () => {
+    btn.disabled = false;
+    btn.textContent = label;
+  };
+  const w = window as unknown as Record<string, () => void>;
+  w.__sukemuTsOk = release;
+  w.__sukemuTsErr = () => {
+    release();
+    const e = $('loginErr');
+    e.textContent = '人機驗證載入失敗,仍可嘗試登入;若持續失敗請重新整理。';
+    e.classList.remove('hidden');
+  };
+  $('tsWidget').innerHTML =
+    `<div class="cf-turnstile" data-sitekey="${siteKey}" data-theme="dark"` +
+    ` data-callback="__sukemuTsOk" data-error-callback="__sukemuTsErr"` +
+    ` data-expired-callback="__sukemuTsErr" data-timeout-callback="__sukemuTsErr"></div>`;
+  const s = document.createElement('script');
+  s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+  s.async = true;
+  s.onerror = w.__sukemuTsErr;
+  document.head.appendChild(s);
+  setTimeout(() => btn.disabled && release(), 10_000);
 }

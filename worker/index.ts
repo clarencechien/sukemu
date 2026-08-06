@@ -75,139 +75,166 @@ const sameOrigin = (req: Request) => {
   return !o || o === new URL(req.url).origin;
 };
 
+/* Turnstile 必須「site key + secret」兩者齊備才啟用。
+   只設 secret 會讓前端渲染不出元件、後端卻要求 token —— 每次登入必定 403
+   「challenge required」,而且沒有任何自救路徑(實測踩過)。
+   少了 site key 時挑戰本來就無法運作,關掉不是安全降級,是避免 100% 斷線。 */
+const turnstileOn = (env: Env) => !!(env.TURNSTILE_SECRET && env.TURNSTILE_SITE_KEY);
+
 const quotaStub = (env: Env, email: string) => env.QUOTA.get(env.QUOTA.idFromName(email));
 const readUsage = async (env: Env, email: string): Promise<Usage> =>
   (await quotaStub(env, email).fetch('https://do/usage')).json<Usage>();
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(req.url);
-    const p = url.pathname;
-
-    // 縱深防禦:設了 CANONICAL_HOST 之後,workers.dev 等非正式 host 一律導回正式網域
-    if (env.CANONICAL_HOST && url.hostname !== env.CANONICAL_HOST && url.hostname !== 'localhost') {
-      if (req.method === 'GET' && !p.startsWith('/api')) {
-        return Response.redirect(`https://${env.CANONICAL_HOST}${p}${url.search}`, 301);
+    try {
+      return await route(req, env, ctx);
+    } catch (err) {
+      // 登入流程的例外要導回登入頁(手機上停在裸 500 等於死路),其餘回 JSON
+      console.error('[fetch]', err);
+      if (new URL(req.url).pathname.startsWith('/auth/')) {
+        return new Response(null, { status: 302, headers: { location: '/?err=auth' } });
       }
-      return new Response('use canonical host', { status: 403 });
+      return bad('伺服器錯誤', 500);
     }
+  },
+} satisfies ExportedHandler<Env>;
 
-    if (p === '/api/config') {
-      return json({
-        mode: env.GOOGLE_CLIENT_ID ? 'oidc' : 'dev',
-        turnstileSiteKey: env.TURNSTILE_SITE_KEY || null,
-        defaultModelMode: resolveMode(env),
-        allowModeToggle: modeToggleEnabled(env),
-      });
-    }
+async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const url = new URL(req.url);
+  const p = url.pathname;
 
-    /* ---------- OAuth(仿 manemu §5.6) ---------- */
-    if (p === '/auth/login') {
-      if (!env.GOOGLE_CLIENT_ID) return bad('尚未設定 Google OIDC,開發模式請用 Email 登入', 404);
-      // Turnstile:設了 secret 就強制驗(POST + token);沒設則 GET/POST 直通
-      if (env.TURNSTILE_SECRET) {
-        if (req.method !== 'POST') return new Response(null, { status: 302, headers: { location: '/' } });
-        if (!sameOrigin(req)) return new Response('forbidden', { status: 403 });
-        const form = await req.formData();
-        const token = form.get('cf-turnstile-response');
-        if (!token) return new Response('challenge required', { status: 403 });
-        const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-          method: 'POST',
-          headers: { 'content-type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            secret: env.TURNSTILE_SECRET,
-            response: String(token),
-            remoteip: req.headers.get('cf-connecting-ip') || '',
-          }),
-        });
-        if (!((await vr.json()) as { success: boolean }).success) return new Response('challenge failed', { status: 403 });
-      }
-      const state = randomHex();
-      const nonce = randomHex();
-      const stCookie = cookieSet('sk_oauth', await sign({ state, nonce, exp: Date.now() / 1000 + 600 }, env), 600);
-      const q = new URLSearchParams({
-        client_id: env.GOOGLE_CLIENT_ID,
-        redirect_uri: `${url.origin}/auth/callback`,
-        response_type: 'code',
-        scope: 'openid email',
-        state,
-        nonce,
-        prompt: 'select_account',
-      });
-      return new Response(null, {
-        status: 302,
-        headers: { location: `https://accounts.google.com/o/oauth2/v2/auth?${q}`, 'set-cookie': stCookie },
-      });
+  // 縱深防禦:設了 CANONICAL_HOST 之後,workers.dev 等非正式 host 一律導回正式網域
+  if (env.CANONICAL_HOST && url.hostname !== env.CANONICAL_HOST && url.hostname !== 'localhost') {
+    if (req.method === 'GET' && !p.startsWith('/api')) {
+      return Response.redirect(`https://${env.CANONICAL_HOST}${p}${url.search}`, 301);
     }
-    if (p === '/auth/callback') {
-      const st = await verify(cookieGet(req, 'sk_oauth'), env);
-      if (!st || st.state !== url.searchParams.get('state')) return new Response('state mismatch', { status: 403 });
-      const tr = await fetch('https://oauth2.googleapis.com/token', {
+    return new Response('use canonical host', { status: 403 });
+  }
+
+  if (p === '/api/config') {
+    if (env.TURNSTILE_SECRET && !env.TURNSTILE_SITE_KEY) {
+      console.warn('[turnstile] 設了 TURNSTILE_SECRET 但沒設 TURNSTILE_SITE_KEY,已停用挑戰');
+    }
+    return json({
+      mode: env.GOOGLE_CLIENT_ID ? 'oidc' : 'dev',
+      turnstileSiteKey: turnstileOn(env) ? env.TURNSTILE_SITE_KEY : null,
+      defaultModelMode: resolveMode(env),
+      allowModeToggle: modeToggleEnabled(env),
+    });
+  }
+
+  /* ---------- OAuth(仿 manemu §5.6) ---------- */
+  if (p === '/auth/login') {
+    if (!env.GOOGLE_CLIENT_ID) return bad('尚未設定 Google OIDC,開發模式請用 Email 登入', 404);
+    // Turnstile:site key + secret 都設好才強制驗(POST + token);否則直通。
+    // 驗證失敗一律導回登入頁帶 err,讓使用者看得到訊息也能重試——
+    // 不要回裸 403 文字頁,手機上等於死路(實測回報)。
+    if (turnstileOn(env)) {
+      if (req.method !== 'POST') return new Response(null, { status: 302, headers: { location: '/' } });
+      if (!sameOrigin(req)) return new Response('forbidden', { status: 403 });
+      // 表單解析失敗(空 body / 非表單 content-type)不該變成裸 500
+      const form = await req.formData().catch(() => null);
+      const token = form?.get('cf-turnstile-response');
+      if (!token) return new Response(null, { status: 302, headers: { location: '/?err=challenge' } });
+      const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          code: url.searchParams.get('code') ?? '',
-          client_id: env.GOOGLE_CLIENT_ID ?? '',
-          client_secret: env.GOOGLE_CLIENT_SECRET ?? '',
-          redirect_uri: `${url.origin}/auth/callback`,
-          grant_type: 'authorization_code',
+          secret: env.TURNSTILE_SECRET!,
+          response: String(token),
+          remoteip: req.headers.get('cf-connecting-ip') || '',
         }),
       });
-      const tok = (await tr.json()) as { id_token?: string };
-      const claims = tok.id_token && (await verifyGoogleIdToken(tok.id_token, env.GOOGLE_CLIENT_ID!, st.nonce));
-      if (!claims) return new Response('token verification failed', { status: 403 });
-      if (!(await resolveUser(claims.email, env)).allowed) {
-        await addToWaitlist(env, claims.email).catch(() => {}); // admin 可在 /admin 一鍵核准
-        return new Response(null, {
-          status: 302,
-          headers: { location: `/?waitlist=1`, 'set-cookie': cookieSet('sk_oauth', '', 0) },
-        });
+      if (!((await vr.json()) as { success: boolean }).success) {
+        return new Response(null, { status: 302, headers: { location: '/?err=challenge' } });
       }
-      const session = await sign({ email: claims.email, exp: Date.now() / 1000 + 7 * 86400 }, env);
+    }
+    const state = randomHex();
+    const nonce = randomHex();
+    const stCookie = cookieSet('sk_oauth', await sign({ state, nonce, exp: Date.now() / 1000 + 600 }, env), 600);
+    const q = new URLSearchParams({
+      client_id: env.GOOGLE_CLIENT_ID,
+      redirect_uri: `${url.origin}/auth/callback`,
+      response_type: 'code',
+      scope: 'openid email',
+      state,
+      nonce,
+      prompt: 'select_account',
+    });
+    return new Response(null, {
+      status: 302,
+      headers: { location: `https://accounts.google.com/o/oauth2/v2/auth?${q}`, 'set-cookie': stCookie },
+    });
+  }
+  if (p === '/auth/callback') {
+    const st = await verify(cookieGet(req, 'sk_oauth'), env);
+    if (!st || st.state !== url.searchParams.get('state')) return new Response('state mismatch', { status: 403 });
+    const tr = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: url.searchParams.get('code') ?? '',
+        client_id: env.GOOGLE_CLIENT_ID ?? '',
+        client_secret: env.GOOGLE_CLIENT_SECRET ?? '',
+        redirect_uri: `${url.origin}/auth/callback`,
+        grant_type: 'authorization_code',
+      }),
+    });
+    const tok = (await tr.json()) as { id_token?: string };
+    const claims = tok.id_token && (await verifyGoogleIdToken(tok.id_token, env.GOOGLE_CLIENT_ID!, st.nonce));
+    if (!claims) return new Response('token verification failed', { status: 403 });
+    if (!(await resolveUser(claims.email, env)).allowed) {
+      await addToWaitlist(env, claims.email).catch(() => {}); // admin 可在 /admin 一鍵核准
       return new Response(null, {
         status: 302,
-        headers: { location: '/', 'set-cookie': cookieSet('sk_session', session, 7 * 86400) },
+        headers: { location: `/?waitlist=1`, 'set-cookie': cookieSet('sk_oauth', '', 0) },
       });
     }
-    if (p === '/auth/logout') {
-      return new Response(null, { status: 302, headers: { location: '/', 'set-cookie': cookieSet('sk_session', '', 0) } });
-    }
+    const session = await sign({ email: claims.email, exp: Date.now() / 1000 + 7 * 86400 }, env);
+    return new Response(null, {
+      status: 302,
+      headers: { location: '/', 'set-cookie': cookieSet('sk_session', session, 7 * 86400) },
+    });
+  }
+  if (p === '/auth/logout') {
+    return new Response(null, { status: 302, headers: { location: '/', 'set-cookie': cookieSet('sk_session', '', 0) } });
+  }
 
-    // 開發用 Email 直登:只在未設定 OIDC 時開放
-    if (p === '/api/login' && req.method === 'POST') {
-      if (env.GOOGLE_CLIENT_ID) return bad('已啟用 Google 登入,請走 /auth/login', 403);
-      const { email: raw } = (await req.json().catch(() => ({}))) as { email?: string };
-      const email = (raw ?? '').trim().toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('Email 格式不正確');
-      if (!(await resolveUser(email, env)).allowed) {
-        await addToWaitlist(env, email);
-        return json({ ok: false, waitlist: true }, { status: 403 });
-      }
-      const session = await sign({ email, exp: Date.now() / 1000 + 30 * 86400 }, env);
-      return json({ ok: true, email }, { headers: { 'Set-Cookie': cookieSet('sk_session', session, 30 * 86400) } });
+  // 開發用 Email 直登:只在未設定 OIDC 時開放
+  if (p === '/api/login' && req.method === 'POST') {
+    if (env.GOOGLE_CLIENT_ID) return bad('已啟用 Google 登入,請走 /auth/login', 403);
+    const { email: raw } = (await req.json().catch(() => ({}))) as { email?: string };
+    const email = (raw ?? '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('Email 格式不正確');
+    if (!(await resolveUser(email, env)).allowed) {
+      await addToWaitlist(env, email);
+      return json({ ok: false, waitlist: true }, { status: 403 });
     }
-    if (p === '/api/logout' && req.method === 'POST') {
-      return json({ ok: true }, { headers: { 'Set-Cookie': cookieSet('sk_session', '', 0) } });
-    }
+    const session = await sign({ email, exp: Date.now() / 1000 + 30 * 86400 }, env);
+    return json({ ok: true, email }, { headers: { 'Set-Cookie': cookieSet('sk_session', session, 30 * 86400) } });
+  }
+  if (p === '/api/logout' && req.method === 'POST') {
+    return json({ ok: true }, { headers: { 'Set-Cookie': cookieSet('sk_session', '', 0) } });
+  }
 
-    /* ---------- 需要登入的部分 ---------- */
-    if (p.startsWith('/api/')) {
-      if (!sameOrigin(req)) return new Response('forbidden', { status: 403 });
-      const session = await sessionFrom(req, env);
-      if (!session) return bad('請先登入', 401);
-      // 每次請求重算分級 → R2 白名單改了立刻生效(不用重登入、不用重部署)
-      const user = await resolveUser(session.email, env);
-      if (!user.allowed) return bad('不在受邀名單內', 403);
-      try {
-        return await api(req, env, ctx, p, session.email, user);
-      } catch (err) {
-        return bad(err instanceof Error ? err.message : '伺服器錯誤', 500);
-      }
+  /* ---------- 需要登入的部分 ---------- */
+  if (p.startsWith('/api/')) {
+    if (!sameOrigin(req)) return new Response('forbidden', { status: 403 });
+    const session = await sessionFrom(req, env);
+    if (!session) return bad('請先登入', 401);
+    // 每次請求重算分級 → R2 白名單改了立刻生效(不用重登入、不用重部署)
+    const user = await resolveUser(session.email, env);
+    if (!user.allowed) return bad('不在受邀名單內', 403);
+    try {
+      return await api(req, env, ctx, p, session.email, user);
+    } catch (err) {
+      return bad(err instanceof Error ? err.message : '伺服器錯誤', 500);
     }
+  }
 
-    return withSec(await env.ASSETS.fetch(req));
-  },
-} satisfies ExportedHandler<Env>;
+  return withSec(await env.ASSETS.fetch(req));
+}
 
 async function api(
   req: Request,

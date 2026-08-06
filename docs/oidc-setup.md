@@ -46,12 +46,31 @@ npm run deploy
 
 - `wrangler.jsonc` 的 `CANONICAL_HOST` 填正式網域(例 `sukemu.ai-apps.work`)→
   workers.dev 等非正式 host 一律 301/403(WAF 繞過洞封死)。留空 = 不檢查。
-- **Turnstile(可選)**:Cloudflare Dashboard → Turnstile → 新增 widget →
+- **Turnstile(可選)**:Cloudflare Dashboard → Turnstile → 新增 widget,
+  **domain 要填 sukemu 自己的網域**(不能沿用 manemu 的 widget)→
   site key 填 `TURNSTILE_SITE_KEY` var、`npx wrangler secret put TURNSTILE_SECRET`。
-  兩者設好後登入頁自動出現驗證、Worker 端強制驗;沒設就略過。
+  **兩者要成對設定**:只設其中一個 → Worker 自動停用挑戰(見 §6 疑難排解)。
 - Rate Limiting(Free 1 條)花在 `/auth/*`;Bot Fight Mode、Always Use HTTPS 免費全開。
 
-## 5. 驗收
+## 5. 疑難排解
+
+**登入按下去出現「challenge required」/ 一直回登入頁**
+
+先看 `curl https://<網域>/api/config` 的 `turnstileSiteKey`:
+
+| 症狀 | 原因 | 處理 |
+|---|---|---|
+| `turnstileSiteKey: null` 但你設過 `TURNSTILE_SECRET` | **只設了一半**:前端渲染不出元件、後端卻要求 token | 補上 `TURNSTILE_SITE_KEY` var 後部署;或把 secret 刪掉(`wrangler secret delete TURNSTILE_SECRET`)完全停用 |
+| 有 site key,但手機常失敗、桌面正常 | 行動網路較常拿到**需要互動**的挑戰,使用者在勾選完成前就按了登入 | 已修:token 到手前按鈕禁用並顯示「驗證中…」 |
+| 兩者都設了仍失敗 | widget 的 domain 設錯(例如沿用 manemu 的 site key) | Turnstile 後台確認 widget 的 domain 是 sukemu 的網域 |
+
+> 現在只設一半時 Worker 會**自動停用**挑戰並在 log 留警告,不會再把登入鎖死;
+> 驗證失敗也一律導回 `/?err=challenge` 顯示可重試的訊息,不會停在裸 403 頁。
+
+**手機能開網頁但登入後跳不回來**:檢查 Google OAuth client 的 redirect URI
+是否與 `CANONICAL_HOST` 一致(含 `https://` 與 `/auth/callback`)。
+
+## 6. 驗收
 
 - [ ] 開正式網域 → 登入頁顯示「使用 Google 登入」(不是 Email 輸入框)
 - [ ] 用名單內的 Google 帳號登入 → 進 App
