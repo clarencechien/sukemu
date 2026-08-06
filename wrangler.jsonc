@@ -3,6 +3,11 @@
   "name": "sukemu",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-01",
+  // 安全:workers.dev 與 preview URL 都不經 zone,WAF / Rate Limiting 全繞過。
+  // 在設定碼層級關死——就算 dashboard 被誤開,下次部署也會關回來。
+  // 對外一律走自訂網域;程式端另有 CANONICAL_HOST 縱深(見 vars)。
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
