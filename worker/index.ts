@@ -40,11 +40,17 @@ export interface Env {
   SESSION_SECRET?: string;
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_SECRET?: string;
+  // P2 thinking 檔位:minimal(預設,A/B 實測 -81% token)| low | medium | high | off(回模型預設)
+  P2_THINKING_LEVEL?: string;
   // 名單與配額
   ADMIN_EMAILS?: string;
   QUOTA_TIERS?: string;
   DEFAULT_TIER?: string;
   DAILY_IMAGES_LIMIT?: string;
+  /** 每人每日估算成本上限(TWD,0 = 關):張數之外的第二道門檻,病態圖與簡單圖差 7 倍花費 */
+  DAILY_TWD_LIMIT?: string;
+  /** 全站每日估算成本上限(TWD,0 = 關):組織層級的錢包保險絲,admin 也受限 */
+  GLOBAL_DAILY_TWD?: string;
   // 安全與計價
   CANONICAL_HOST?: string;
   /** 覆寫/補充模型單價表:{"model-id":[輸入USD/M, 輸出USD/M]} */
@@ -84,6 +90,45 @@ const turnstileOn = (env: Env) => !!(env.TURNSTILE_SECRET && env.TURNSTILE_SITE_
 const quotaStub = (env: Env, email: string) => env.QUOTA.get(env.QUOTA.idFromName(email));
 const readUsage = async (env: Env, email: string): Promise<Usage> =>
   (await quotaStub(env, email).fetch('https://do/usage')).json<Usage>();
+
+/** 全站計數共用同一顆 DO;'__global__' 不含 @,不會與任何 email 撞名 */
+const GLOBAL = '__global__';
+
+/* 錢包保險絲:張數(分級)+ 每人每日 TWD + 全站每日 TWD 三道門檻。
+   P1、P2 都要過(P2 曾是唯一沒有上限的付費入口)。
+   已知 race:read-then-act + waitUntil 事後入帳,併發下可微幅超額——
+   量級是「多一兩張圖」不是「多一個量級」,接受;要嚴格就把檢查搬進 DO。 */
+async function checkBudgets(env: Env, email: string, user: UserInfo, countImage: boolean): Promise<Response | null> {
+  const [mine, site] = await Promise.all([
+    readUsage(env, email).catch(() => null),
+    readUsage(env, GLOBAL).catch(() => null),
+  ]);
+  if (countImage && mine && user.limitImages > 0 && mine.count >= user.limitImages) {
+    return bad(`今日額度已用完(${mine.count}/${user.limitImages} 張),台灣時間早上 8 點重置`, 429);
+  }
+  const twdLimit = Number(env.DAILY_TWD_LIMIT || 0);
+  if (mine && twdLimit > 0 && mine.costTwd >= twdLimit) {
+    return bad(`今日成本額度已用完(約 NT$${mine.costTwd.toFixed(1)}),台灣時間早上 8 點重置`, 429);
+  }
+  const siteLimit = Number(env.GLOBAL_DAILY_TWD || 0);
+  if (site && siteLimit > 0 && site.costTwd >= siteLimit) {
+    return bad('今日全站預算已用完,明天再來(台灣時間早上 8 點重置)', 429);
+  }
+  return null;
+}
+
+/** 用量入帳:個人與全站各記一筆(waitUntil,不擋回應) */
+function recordUsage(
+  ctx: ExecutionContext,
+  env: Env,
+  email: string,
+  add: { images: number; inTok: number; outTok: number; costTwd: number },
+) {
+  const body = JSON.stringify(add);
+  for (const key of [email, GLOBAL]) {
+    ctx.waitUntil(quotaStub(env, key).fetch('https://do/add', { method: 'POST', body }));
+  }
+}
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -275,11 +320,8 @@ async function api(
     if (!image || !mime?.startsWith('image/')) return bad('缺少影像資料');
     if (image.length > MAX_IMAGE_B64) return bad('影像過大,請縮小後再試', 413);
 
-    // 配額保險絲:上限由分級決定(0 = 無上限),DO 只計數
-    const u = await readUsage(env, email).catch(() => null);
-    if (u && user.limitImages > 0 && u.count >= user.limitImages) {
-      return bad(`今日額度已用完(${u.count}/${user.limitImages} 張),台灣時間早上 8 點重置`, 429);
-    }
+    const denied = await checkBudgets(env, email, user, true);
+    if (denied) return denied;
 
     const { lang, blocks, usage, model, mode } = await runP1(
       env, image, mime, resolveMode(env, modelMode),
@@ -287,12 +329,7 @@ async function api(
     );
     const twd = estCostTwd(env, model, usage);
     // 成功才計費(失敗不扣額度)
-    ctx.waitUntil(
-      quotaStub(env, email).fetch('https://do/add', {
-        method: 'POST',
-        body: JSON.stringify({ images: 1, ...usage, costTwd: twd }),
-      }),
-    );
+    recordUsage(ctx, env, email, { images: 1, ...usage, costTwd: twd });
     return json({ ok: true, result: { name: name || 'photo', lang, blocks }, usage: { ...usage, twd, model, mode } });
   }
 
@@ -303,14 +340,13 @@ async function api(
       modelMode?: string;
     };
     if (!Array.isArray(blocks) || !blocks.length) return bad('缺少文字塊');
+    if (blocks.length > 200) return bad('文字塊過多', 413);
+    // P2 也是付費入口,同一組保險絲(不含張數——張數在 P1 已扣)
+    const denied = await checkBudgets(env, email, user, false);
+    if (denied) return denied;
     const { edits, usage, model, mode } = await runP2(env, lang || '??', blocks, resolveMode(env, modelMode));
     const twd = estCostTwd(env, model, usage);
-    ctx.waitUntil(
-      quotaStub(env, email).fetch('https://do/add', {
-        method: 'POST',
-        body: JSON.stringify({ images: 0, ...usage, costTwd: twd }),
-      }),
-    );
+    recordUsage(ctx, env, email, { images: 0, ...usage, costTwd: twd });
     return json({ ok: true, edits, usage: { ...usage, twd, model, mode } });
   }
 

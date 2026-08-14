@@ -37,10 +37,17 @@
     // P2 只佔 8–19% 成本,要單獨調就設這兩個(不設 = 同該模式的主模型)
     // "FAST_MODEL_P2": "gemini-3.6-flash",
     // "ACCURATE_MODEL_P2": "gemini-3.1-pro-preview",
+    // P2 thinking 檔位(機械任務):minimal 實測 -81% 輸出 token、快 4 倍、品質不降
+    // (A/B 2026-08-14,見 docs/gemini-api-lessons.md);"off" = 回模型預設(medium)
+    "P2_THINKING_LEVEL": "minimal",
     // 額度分級:每日「張數」,0 = 無上限。加級別、在名單標人都不用改碼
     "QUOTA_TIERS": "{\"admin\":0,\"pro\":200,\"beta\":30,\"trial\":5}",
     "DEFAULT_TIER": "beta",
     "DAILY_IMAGES_LIMIT": "30",
+    // 錢包保險絲第二、三道(單位對齊計費單位,不只張數;0 = 關):
+    // 每人每日估算成本上限;全站每日上限(admin 也受限)。以「牌價」計,寧可高估
+    "DAILY_TWD_LIMIT": "60",
+    "GLOBAL_DAILY_TWD": "600",
     // 列在這裡的帳號一律 admin 級(無上限),可開 /admin 管理頁
     "ADMIN_EMAILS": "clarence.chien@gmail.com",
     // 正式網域(如 sukemu.ai-apps.work):設了之後其他 host 一律 301/403;留空 = 不檢查
@@ -51,9 +58,10 @@
     // 注意:這是 var 不是 dashboard 設定——在 dashboard 手改會被下次 deploy 蓋掉,要改就改這裡。
     // 與 manemu 共用同一個 widget(其 hostname 清單需含 sukemu.ai-apps.work),secret 也是同一把。
     "TURNSTILE_SITE_KEY": "0x4AAAAAAEBVTLYxe23qYu09",
-    // 計價:單價表按模型內建在 worker/gemini.ts,換 GEMINI_MODEL 會自動換價。
-    // 官方調價或出新模型時,用 MODEL_PRICES 覆寫即可(不必改碼):
-    //   "MODEL_PRICES": "{\"gemini-3.6-flash\":[1.5,7.5]}"   ← [輸入, 輸出] USD/百萬 token
+    // 計價:單價表按模型內建在 worker/gemini.ts,換 FAST_MODEL / ACCURATE_MODEL 會自動換價。
+    // 內建表列「牌價」(3.6/3.7-flash 至 2026-12-31 促銷半價,保險絲刻意用牌價寧可高估);
+    // 官方調價、新模型、或要對齊促銷帳單,用 MODEL_PRICES 覆寫即可(不必改碼):
+    //   "MODEL_PRICES": "{\"gemini-3.6-flash\":[0.75,3.75]}"   ← [輸入, 輸出] USD/百萬 token
     "USD_TWD": "31.5"
   },
   "observability": {
