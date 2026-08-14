@@ -75,9 +75,10 @@ M2 上線後實測發現單張成本偏高。修正計價錯誤(原本誤把 fla
 **未處理**
 
 - 沒有依圖片複雜度自動升降檔(例如偵測到小字密集才用精準)。等 §12 的數據出來再談
-- ~~thinking 預算未顯式設定~~ → 2026-08-14 已處理:P2 設 `thinkingLevel: minimal`
-  (A/B -81% token、快 4 倍),P1 維持預設。數據與理由見
-  [`../gemini-api-lessons.md`](../gemini-api-lessons.md)
+- ~~thinking 預算未顯式設定~~ → 2026-08-14 已處理,兩趟各自定案:
+  **P2 設 `thinkingLevel: minimal`**(-81% token、快 4 倍、品質不降);
+  **P1 維持模型預設**——A/B 實測降檔會讓框橫向漂移且座標規格掉回 0–1000,
+  「穩定地歪」不等於準。數據見 [`../gemini-api-lessons.md`](../gemini-api-lessons.md)
 
 ## 後記(2026-08-06)— 快速檔位實測不合格,預設改精準
 
