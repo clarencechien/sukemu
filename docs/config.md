@@ -54,9 +54,10 @@
 - **單張切換**(MODE_TOGGLE 開啟時):App 頂列檔位鈕,切了之後同一張圖會**重翻**(不吃舊快取)
 - **P2 想單獨用別的模型**:設 `FAST_MODEL_P2` / `ACCURATE_MODEL_P2`
   (不設 = 同該模式的主模型;P2 只佔 8–19% 成本,獨立調的效益有限)
-- **P2 thinking**:`P2_THINKING_LEVEL` 預設 `minimal`(A/B 實測 -81% token、快 4 倍、品質不降,
-  見 [gemini-api-lessons.md](gemini-api-lessons.md));`off` = 回模型預設。
-  **P1 的 thinking 不設**(視覺定位是 reasoning-shaped),要動先跑 A/B
+- **thinking 檔位**(決策見 [ADR 0002](adr/0002-per-pass-thinking-levels.md)):
+  `P2_THINKING_LEVEL` 預設 `minimal`(A/B -81% token、快 4 倍、修訂反而更細);`off` = 回模型預設。
+  **P1 刻意不設**——實測降檔會讓框橫向漂移、座標掉回 0–1000,`high` 也不比預設準。
+  要再動先跑 `scripts/p1-thinking.mjs` + `scripts/p1-stability.mjs`(**必須含變異基準**)
 
 ## 換檔位前先跑 A/B
 

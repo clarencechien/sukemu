@@ -3,6 +3,13 @@
    換 P1 模型省錢事小,框歪了整個產品就沒了(handoff §12 第一驗收項),
    所以決定前一定要用真實照片跑過這支。
 
+   ⚠ 這支是 n=1 的初篩,不足以下決策(2026-08-14 實測教訓):
+     1. 同一個設定重跑兩次的框差異,可能比不同設定之間還大
+        → 先跑 scripts/p1-stability.mjs 取得「同設定重複 3 次」的變異基準
+     2. 框數穩定、IoU 一致不代表準——可能是「穩定地歪」
+        → 一定要把座標疊回照片目視(輸出的 JSON 就是為此保留)
+   完整數據與方法論見 docs/gemini-api-lessons.md。
+
    用法:
      GEMINI_API_KEY=xxx node scripts/ab-models.mjs 照片.jpg
      GEMINI_API_KEY=xxx node scripts/ab-models.mjs 照片.jpg gemini-3.6-flash gemini-3.5-flash-lite
