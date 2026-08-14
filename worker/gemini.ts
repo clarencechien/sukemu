@@ -36,8 +36,13 @@ export const P2_SCHEMA = {
       type: 'ARRAY',
       items: {
         type: 'OBJECT',
-        properties: { i: { type: 'INTEGER' }, zh: STR, nt: STR },
-        required: ['i'],
+        properties: {
+          i: { type: 'INTEGER' },
+          t: { ...STR, description: '該塊原文(en)開頭 8 個字元,用於對位驗證' },
+          zh: STR,
+          nt: STR,
+        },
+        required: ['i', 't'],
       },
     },
   },
@@ -64,7 +69,8 @@ export const P2_PROMPT = `你是台灣在地化編輯。輸入是一張圖片的
 1. 把 zh 修成道地台灣正體中文:去除翻譯腔、改用台灣慣用詞、全形標點、術語全篇一致
 2. 對需要背景知識、雙關語、文化脈絡或譯法取捨說明的塊,寫一句簡短譯註 nt(台灣正體中文)
 
-只回傳「zh 有修改」或「有 nt」的塊;完全不需要動的塊不要回傳。`;
+只回傳「zh 有修改」或「有 nt」的塊;完全不需要動的塊不要回傳。
+每一塊都要帶 t = 該塊原文 en 的開頭 8 個字元(對位驗證用,照抄即可)。`;
 
 export type TokenUsage = { inTok: number; outTok: number };
 
@@ -93,7 +99,7 @@ async function generateJSON(
   model: string,
   parts: Part[],
   schema: object,
-  highRes: boolean,
+  opts: { highRes?: boolean; thinkingLevel?: string } = {},
 ): Promise<{ data: unknown; usage: TokenUsage }> {
   if (!env.GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY 未設定:wrangler secret put GEMINI_API_KEY');
@@ -102,7 +108,10 @@ async function generateJSON(
     responseMimeType: 'application/json',
     responseSchema: schema,
   };
-  if (highRes) config.mediaResolution = 'MEDIA_RESOLUTION_HIGH';
+  if (opts.highRes) config.mediaResolution = 'MEDIA_RESOLUTION_HIGH';
+  // 3.x 官方旋鈕是 thinkingLevel(minimal/low/medium/high);不要用 thinkingBudget,
+  // 兩者同時給會 400。部分模型沒有某些檔位(3.7-flash 無 minimal)→ 靠下面的 400 fallback
+  if (opts.thinkingLevel) config.thinkingConfig = { thinkingLevel: opts.thinkingLevel };
 
   const call = (generationConfig: Record<string, unknown>) =>
     fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
@@ -112,9 +121,10 @@ async function generateJSON(
     });
 
   let res = await call(config);
-  if (res.status === 400 && highRes) {
-    // 部分模型版本不接受 mediaResolution,退掉重試一次
-    const { mediaResolution: _drop, ...rest } = config;
+  if (res.status === 400 && (opts.highRes || opts.thinkingLevel)) {
+    // 未知/不支援的 generationConfig 欄位 → 400 → 拿掉選配欄位重試一次(通用防禦)
+    const { mediaResolution: _m, thinkingConfig: _t, ...rest } = config;
+    console.warn(`[gemini] ${model} 拒絕選配欄位,退階重試`);
     res = await call(rest);
   }
   // 錯誤訊息帶上模型名:換檔位後出問題時,要一眼看出是哪個模型在報錯
@@ -135,10 +145,13 @@ async function generateJSON(
 }
 
 /* 各模型單價(USD / 百萬 token):[輸入, 輸出],輸出價含 thinking token。
-   2026-08 官方價目表。換模型時自動換價——不要再把單價寫死成單一組,
-   否則改了 GEMINI_MODEL 卻沿用舊價,帳會算錯(此坑已踩過)。
-   價目調整或新模型:用 var MODEL_PRICES 覆寫/補充,不必改碼。 */
+   2026-08-14 對官方 pricing 頁核實。換 FAST_MODEL / ACCURATE_MODEL 時自動換價——
+   不要把單價寫死成單一組,否則換了模型卻沿用舊價,帳會算錯(此坑已踩過)。
+   價目調整或新模型:用 var MODEL_PRICES 覆寫/補充,不必改碼。
+   注意:3.6/3.7-flash 至 2026-12-31 促銷半價($0.75/$3.75)——這裡刻意列「牌價」,
+   保險絲與成本試算寧可高估;要對齊實際帳單可用 MODEL_PRICES 覆寫成促銷價。 */
 const DEFAULT_PRICES: Record<string, [number, number]> = {
+  'gemini-3.7-flash': [1.5, 7.5], // 無 minimal 思考檔;翻譯行為零數據,換用前先跑 ab-models.mjs
   'gemini-3.6-flash': [1.5, 7.5],
   'gemini-3.5-flash': [1.5, 9.0],
   'gemini-3.5-flash-lite': [0.3, 2.5],
@@ -217,12 +230,14 @@ export function normalizeBlocks(
 
 export async function runP1(env: Env, image: string, mime: string, mode: ModelMode, iw?: number, ih?: number) {
   const model = modelFor(env, mode, 'p1');
+  // P1(bounding box 空間定位)是 reasoning-shaped:thinking 維持模型預設,
+  // 要降級先跑 ab-models.mjs 同料 A/B(handoff §3 品質優先)
   const { data, usage } = await generateJSON(
     env,
     model,
     [{ inline_data: { mime_type: mime, data: image } }, { text: P1_PROMPT }],
     P1_SCHEMA,
-    true,
+    { highRes: true },
   );
   const out = data as { lang?: string; blocks?: Record<string, unknown>[] };
   const { blocks, scaleApplied } = normalizeBlocks(out.blocks ?? [], iw, ih);
@@ -230,21 +245,51 @@ export async function runP1(env: Env, image: string, mime: string, mode: ModelMo
   return { lang: String(out.lang ?? '??').toUpperCase(), blocks, usage, model, mode };
 }
 
+const squash = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+
 export async function runP2(env: Env, lang: string, blocks: { en: string; zh: string }[], mode: ModelMode) {
   const model = modelFor(env, mode, 'p2');
   const input = JSON.stringify({
     lang,
     blocks: blocks.map((b, i) => ({ i, en: b.en, zh: b.zh })),
   });
-  const { data, usage } = await generateJSON(env, model, [{ text: `${P2_PROMPT}\n\n${input}` }], P2_SCHEMA, false);
-  const out = data as { blocks?: { i?: unknown; zh?: unknown; nt?: unknown }[] };
+  // P2(JSON 進 JSON 出的在地化改寫)是機械任務:thinking 降到 minimal。
+  // 同料 A/B(2026-08-14,白板菜單 20 塊):medium 12.0s/2256 tok vs minimal
+  // 2.8s/424 tok(-81%),minimal 的修訂反而更多更細,id 全部有效。
+  // "off" 可完全不送 thinkingConfig(回到模型預設)。
+  const thinkingLevel = env.P2_THINKING_LEVEL === 'off' ? undefined : env.P2_THINKING_LEVEL || 'minimal';
+  const { data, usage } = await generateJSON(env, model, [{ text: `${P2_PROMPT}\n\n${input}` }], P2_SCHEMA, {
+    thinkingLevel,
+  });
+  const out = data as { blocks?: { i?: unknown; t?: unknown; zh?: unknown; nt?: unknown }[] };
 
-  const edits = (out.blocks ?? [])
-    .filter(e => Number.isInteger(Number(e.i)))
-    .map(e => ({
-      i: Number(e.i),
+  /* index-keyed batch JSON 的「id 對滑」防線(姊妹專案 ytplayer 實測踩雷:
+     譯文通順但對到錯的塊,自動指標測不到):
+     1. i 必須在範圍內且不重複
+     2. t(原文前 8 字的回聲)要對得上 blocks[i].en——對不上就丟棄該筆修訂,寧缺勿錯 */
+  const seen = new Set<number>();
+  let dropped = 0;
+  const edits: { i: number; zh?: string; nt?: string }[] = [];
+  for (const e of out.blocks ?? []) {
+    const i = Number(e.i);
+    if (!Number.isInteger(i) || i < 0 || i >= blocks.length || seen.has(i)) {
+      dropped++;
+      continue;
+    }
+    if (typeof e.t === 'string' && e.t) {
+      const echo = squash(e.t).slice(0, 6);
+      if (echo && !squash(blocks[i].en).includes(echo)) {
+        dropped++;
+        continue;
+      }
+    }
+    seen.add(i);
+    edits.push({
+      i,
       ...(typeof e.zh === 'string' && e.zh ? { zh: e.zh } : {}),
       ...(typeof e.nt === 'string' && e.nt ? { nt: e.nt } : {}),
-    }));
+    });
+  }
+  if (dropped) console.warn(`[p2] ${model} 丟棄 ${dropped} 筆對位失敗的修訂(id 對滑防線)`);
   return { edits, usage, model, mode };
 }

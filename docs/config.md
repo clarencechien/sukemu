@@ -25,6 +25,17 @@
 - 計數在每人一個的 Durable Object,**UTC 00:00(台灣早上 08:00)重置**;
   P1 成功才扣額度,失敗不計
 
+**錢包保險絲共三道,P1 與 P2 都檢查**(單位對齊計費單位,見
+[gemini-api-lessons.md](gemini-api-lessons.md)):
+
+| var | 預設 | 說明 |
+|---|---|---|
+| `QUOTA_TIERS` | 見上 | 每人每日**張數**(分級;admin 無上限) |
+| `DAILY_TWD_LIMIT` | 60 | 每人每日**估算成本**(TWD;0 = 關)——病態圖與簡單圖差 7 倍花費,張數擋不住 |
+| `GLOBAL_DAILY_TWD` | 600 | **全站**每日估算成本(TWD;0 = 關);**admin 也受限** |
+
+第四層在 Google 端(程式蓋不到):AI Studio Spend 頁設每專案花費上限。
+
 ---
 
 # 二、模型檔位
@@ -43,6 +54,9 @@
 - **單張切換**(MODE_TOGGLE 開啟時):App 頂列檔位鈕,切了之後同一張圖會**重翻**(不吃舊快取)
 - **P2 想單獨用別的模型**:設 `FAST_MODEL_P2` / `ACCURATE_MODEL_P2`
   (不設 = 同該模式的主模型;P2 只佔 8–19% 成本,獨立調的效益有限)
+- **P2 thinking**:`P2_THINKING_LEVEL` 預設 `minimal`(A/B 實測 -81% token、快 4 倍、品質不降,
+  見 [gemini-api-lessons.md](gemini-api-lessons.md));`off` = 回模型預設。
+  **P1 的 thinking 不設**(視覺定位是 reasoning-shaped),要動先跑 A/B
 
 ## 換檔位前先跑 A/B
 
@@ -68,22 +82,25 @@ GEMINI_API_KEY=xxx node scripts/ab-models.mjs 照片.jpg gemini-3.6-flash gemini
 **估算公式**:`成本 = (inTok × 輸入單價 + outTok × 輸出單價) ÷ 1M × 匯率`,
 其中 `outTok = 回應 token + thinking token`——**thinking 依輸出價計費,是成本大宗**。
 
-## 單價表(2026-08 官方價目,USD / 百萬 token)
+## 單價表(牌價,2026-08-14 對官方 pricing 頁核實;USD / 百萬 token)
 
 單價按模型內建在 `worker/gemini.ts`,**換模型會自動換價**。
 官方調價或出新模型時用 var `MODEL_PRICES` 覆寫即可,不必改碼:
-`"MODEL_PRICES": "{\"gemini-3.6-flash\":[1.5,7.5]}"`
+`"MODEL_PRICES": "{\"gemini-3.6-flash\":[0.75,3.75]}"`
 
-| 模型 | 輸入 | 輸出(含 thinking) |
-|---|---|---|
-| `gemini-3.6-flash` | $1.50 | $7.50 |
-| `gemini-3.5-flash` | $1.50 | $9.00 |
-| `gemini-3.5-flash-lite` | $0.30 | $2.50 |
-| `gemini-3.1-flash-lite` | $0.25 | $1.50 |
-| `gemini-3-flash-preview` | $0.50 | $3.00 |
-| `gemini-3.1-pro-preview` | $2.00 | $12.00 |
+| 模型 | 輸入 | 輸出(含 thinking) | 備註 |
+|---|---|---|---|
+| `gemini-3.7-flash` | $1.50 | $7.50 | 促銷至 2026-12-31 半價;無 minimal 思考檔;翻譯零數據,先 A/B |
+| `gemini-3.6-flash` | $1.50 | $7.50 | 促銷至 2026-12-31 半價($0.75/$3.75) |
+| `gemini-3.5-flash` | $1.50 | $9.00 | |
+| `gemini-3.5-flash-lite` | $0.30 | $2.50 | |
+| `gemini-3.1-flash-lite` | $0.25 | $1.50 | |
+| `gemini-3-flash-preview` | $0.50 | $3.00 | |
+| `gemini-3.1-pro-preview` | $2.00 | $12.00 | |
 
-> **沒有 `gemini-3.6-flash-lite`**——3.6 只出 Flash,lite 檔位停在 3.5。
+> **沒有 `gemini-3.6-flash-lite` / 3.7-lite**——lite 檔位停在 3.5。
+> **內建表刻意用牌價**:保險絲寧可高估,單位經濟不能建立在 4.5 個月後失效的促銷價上
+> (帳面成本因此比促銷期實付高約一倍);要對齊實際帳單用 `MODEL_PRICES` 覆寫。
 
 匯率在 var `USD_TWD`(預設 31.5)。
 
