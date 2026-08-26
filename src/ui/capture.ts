@@ -7,6 +7,7 @@ import { api, ApiError } from '../api';
 import { docStore, recordIds } from '../db';
 import { refreshHistory } from './history';
 import { isAuthed, refreshUsage } from './login';
+import { setBusy } from './busy';
 import { modelMode } from './mode';
 import type { Viewer } from './viewer';
 
@@ -65,6 +66,7 @@ export function initCapture(viewer: Viewer) {
   async function handle(file: File, name: string) {
     if (busy) return;
     busy = true;
+    setBusy(true); // 翻譯期間不讓 PWA 自動更新重載頁面(結果還沒落地 IndexedDB)
     try {
       show('上傳中');
       const { b64, mime, url, blob, thumb, iw, ih } = await prep(file);
@@ -130,6 +132,7 @@ export function initCapture(viewer: Viewer) {
       }
     } finally {
       busy = false;
+      setBusy(false);
     }
   }
 }

@@ -79,7 +79,10 @@ GEMINI_API_KEY=xxx node scripts/ab-models.mjs 照片.jpg
 - **資料契約** `src/types.ts`(`Block` / `Result`),欄位名前後端共用,不可改;座標一律正規化百分比;`v?: boolean` 標直排文字(前端以 `writing-mode: vertical-rl` 呈現)
 - **座標防呆** 模型常不照 prompt 回 0–100 百分比(lite 檔尤其會掉回 0–1000 的訓練慣例)。`normalizeBlocks()` 從數值範圍推回原始規格(0–1000 / 像素 / 0–1 小數)再換算,並用外框幾何夾住 `fs`——橫排字高 ≤ 框高、直排字寬 ≤ 框寬
 - **結果保存** `src/db.ts` 裝置端 IndexedDB(§9:譯文不落地伺服器):每筆存壓縮影像 + 縮圖 + blocks + 影像 hash。上傳前先以「hash + 檔位」查紀錄,**同一張圖同一檔位翻過就直接開啟、不重打 API**;「紀錄」面板可瀏覽、重開、刪除;譯文編輯自動回存
-- **PWA**(M5)`public/manifest.json` + `public/sw.js`(離線殼:導覽網路優先、雜湊資產快取優先、`/api/` 不快取)+ `public/icons/`;安裝後 standalone 隱藏網址列。登入頁有安裝按鈕(Android/桌面)與 iOS 加入主畫面指引
+- **PWA**(M5)`public/manifest.json` + `public/sw.js` + `public/icons/`;安裝後 standalone 隱藏網址列。登入頁有安裝按鈕(Android/桌面)與 iOS 加入主畫面指引
+  - 快取三分:導覽網路優先、`/assets/` 雜湊檔快取優先、其餘同源 stale-while-revalidate(icons/manifest 才不會卡舊版);`/api/` 不快取
+  - **自動更新**:建置時把 `index.html` 的雜湊注入 `sw.js`(`vite.config.ts` 的 `sw-build-id`)——沒這一步 `sw.js` 位元組不變,已安裝的 PWA 永遠收不到新版。回到前景與每 30 分鐘各查一次,新版接管後**在閒置時**自動重載(翻譯進行中會等它做完,避免結果還沒進 IndexedDB 就被沖掉),重載後顯示「已更新到最新版本」
+- **型級** `--fs-micro`…`--fs-2xl` 一套階梯定在 `tokens.css`,元件不寫死字級。`--fs-micro`(12px)是硬下限;圖上的疊字不吃這套(它用 `--u` 隨圖寬縮放)
 - **無內建示範圖** 空狀態是純 CSS 的 ghost 佔位(虛線板 + 淡色假菜單 + 兩塊疊字示意),零資產、零請求,且會跟著視覺語彙一起變
 
 ## 前端互動(原型即規格)
