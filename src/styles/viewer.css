@@ -3,49 +3,49 @@
 
 /* ── 頂列 ───────────────────────────────────── */
 .bar {
-  flex: 0 0 auto; display: flex; align-items: center; gap: .9rem; padding: .55rem 1rem;
-  padding-top: calc(.55rem + env(safe-area-inset-top));
+  flex: 0 0 auto; display: flex; align-items: center; gap: .7rem; padding: .5rem 1rem;
+  padding-top: calc(.5rem + env(safe-area-inset-top));
   padding-left: calc(1rem + env(safe-area-inset-left));
   padding-right: calc(1rem + env(safe-area-inset-right));
   border-bottom: 1px solid var(--edge); background: var(--panel); flex-wrap: wrap;
 }
-.mark b { font-weight: 700; font-size: .84rem; letter-spacing: .16em; text-transform: uppercase; color: #fff }
-.mark span { font-family: var(--doc); font-size: .6rem; color: var(--cool); margin-left: .5rem; letter-spacing: .2em }
-.langs { font-family: var(--data); font-size: .64rem; color: var(--mute) }
+.mark b { font-weight: 700; font-size: var(--fs-base); letter-spacing: .16em; text-transform: uppercase; color: #fff }
+.mark span { font-family: var(--doc); font-size: var(--fs-tiny); color: var(--cool); margin-left: .5rem; letter-spacing: .2em }
+.langs { font-family: var(--data); font-size: var(--fs-tiny); color: var(--mute) }
 .langs b { color: var(--cool); font-weight: 500 }
-.usage { font-family: var(--data); font-size: .56rem; color: var(--mute); font-variant-numeric: tabular-nums }
+.usage { font-family: var(--data); font-size: var(--fs-micro); color: var(--mute); font-variant-numeric: tabular-nums }
 .spacer { flex: 1 1 auto }
-.dial { display: flex; align-items: center; gap: .4rem; font-family: var(--data); font-size: .56rem; color: var(--mute) }
+.dial { display: flex; align-items: center; gap: .4rem; font-family: var(--data); font-size: var(--fs-micro); color: var(--mute) }
 .dial input { width: 5rem; accent-color: var(--cool) }
 .dial b { color: var(--pale); font-weight: 400; min-width: 2.1rem; text-align: right }
 .seg { display: flex; border: 1px solid var(--edge); border-radius: 2px; overflow: hidden }
 .seg button {
   appearance: none; background: transparent; border: 0; border-right: 1px solid var(--edge);
-  color: var(--mute); font-family: var(--chrome); font-weight: 600; font-size: .64rem; letter-spacing: .1em;
-  text-transform: uppercase; padding: .38rem .6rem; cursor: pointer; white-space: nowrap;
+  color: var(--mute); font-family: var(--chrome); font-weight: 600; font-size: var(--fs-tiny); letter-spacing: .04em;
+  text-transform: uppercase; padding: .3rem .5rem; cursor: pointer; white-space: nowrap;
 }
 .seg button:last-child { border-right: 0 }
 .seg button[aria-pressed=true] { background: var(--cool); color: #04121B }
 .seg button kbd { font-family: var(--data); font-size: .85em; opacity: .55; margin-left: .3em }
 .flip {
   appearance: none; border: 1px solid var(--cool); background: transparent; color: var(--cool); border-radius: 2px;
-  font-family: var(--chrome); font-weight: 700; font-size: .64rem; letter-spacing: .1em; padding: .38rem .65rem; cursor: pointer;
+  font-family: var(--chrome); font-weight: 700; font-size: var(--fs-tiny); letter-spacing: .06em; padding: .3rem .55rem; cursor: pointer;
 }
 .flip:hover { background: var(--cool); color: #04121B }
 .flip kbd { font-family: var(--data); opacity: .6 }
 .pick {
   appearance: none; background: transparent; border: 1px solid var(--edge); border-radius: 2px;
-  color: var(--mute); font-family: var(--data); font-size: .6rem; padding: .38rem .5rem; cursor: pointer;
+  color: var(--mute); font-family: var(--data); font-size: var(--fs-tiny); padding: .3rem .45rem; cursor: pointer;
 }
 .shoot {
   appearance: none; border: 1px solid var(--cool); background: transparent; color: var(--cool); border-radius: 2px;
-  font-family: var(--chrome); font-weight: 700; font-size: .64rem; letter-spacing: .1em; padding: .38rem .65rem; cursor: pointer;
+  font-family: var(--chrome); font-weight: 700; font-size: var(--fs-tiny); letter-spacing: .06em; padding: .3rem .55rem; cursor: pointer;
 }
 .shoot:hover { background: var(--cool); color: #04121B }
 /* 模型檔位:非譯文元素,一律用中性/青色語彙(橘紅只給譯文) */
 .mode {
   appearance: none; border: 1px solid var(--edge); background: transparent; color: var(--mute); border-radius: 2px;
-  font-family: var(--chrome); font-weight: 600; font-size: .62rem; letter-spacing: .08em; padding: .38rem .6rem;
+  font-family: var(--chrome); font-weight: 600; font-size: var(--fs-tiny); letter-spacing: .06em; padding: .3rem .5rem;
   cursor: pointer; white-space: nowrap;
 }
 .mode[data-mode=accurate] { border-color: var(--cool); color: var(--cool) }
@@ -69,7 +69,7 @@ body:not([data-mode=note]) .frame { margin: auto }
   position: sticky; top: 0; left: 0; align-self: center; margin-bottom: .6rem; z-index: 5;
   display: flex; align-items: center; gap: .5rem;
   background: var(--panel); border: 1px solid var(--cool); border-radius: 2px;
-  padding: .45rem .8rem; font-family: var(--data); font-size: .64rem; color: var(--cool);
+  padding: .45rem .8rem; font-family: var(--data); font-size: var(--fs-tiny); color: var(--cool);
   max-width: min(90%, 34rem);
 }
 .progress i { flex: 0 0 auto; width: .5rem; height: .5rem; border-radius: 50%; background: var(--cool); animation: pulse 1s infinite }
@@ -89,13 +89,13 @@ body[data-empty=true] .frame { display: none }
   padding: 1.3rem 1.6rem; background: rgba(21, 28, 37, .4);
 }
 .ghostBoard pre {
-  font-family: var(--data); font-size: clamp(11px, 2.6vw, 15px); line-height: 1.9;
+  font-family: var(--data); font-size: clamp(13px, 2.9vw, 17px); line-height: 1.9;
   color: var(--mute); opacity: .55; user-select: none; margin: 0;
 }
 .gblk {
   position: absolute; display: flex; align-items: center; justify-content: center;
   font-family: var(--doc); font-weight: 700; color: var(--hot);
-  font-size: clamp(12px, 2.9vw, 17px); padding: .1em .4em; border-radius: 2px;
+  font-size: clamp(14px, 3.2vw, 19px); padding: .1em .4em; border-radius: 2px;
   background: linear-gradient(160deg, rgba(206, 238, 255, .26), rgba(228, 244, 255, .14));
   box-shadow: inset 0 0 0 1px rgba(65, 201, 255, .28);
   text-shadow: 0 0 3px #FFF, 0 0 8px rgba(255, 255, 255, .85);
@@ -103,7 +103,7 @@ body[data-empty=true] .frame { display: none }
   pointer-events: none;
 }
 .ghostHint {
-  font-family: var(--doc); font-size: .76rem; color: var(--mute);
+  font-family: var(--doc); font-size: var(--fs-sm); color: var(--mute);
   text-align: center; line-height: 1.7; margin-top: 1rem; text-wrap: balance;
 }
 .ghostAuth { display: inline-block; margin-top: .3rem; color: var(--cool); font-weight: 500 }
@@ -193,11 +193,11 @@ body[data-mode=note] .notepane { display: flex }
   flex: 0 0 auto; display: flex; align-items: center; gap: .8rem; flex-wrap: wrap;
   padding-bottom: .5rem; border-bottom: 1px solid var(--edge);
 }
-.noteshead h2 { font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; color: var(--mute); font-weight: 600 }
+.noteshead h2 { font-size: var(--fs-tiny); letter-spacing: .18em; text-transform: uppercase; color: var(--mute); font-weight: 600 }
 .filters { display: flex; gap: .3rem; margin-left: auto }
 .filters button {
   appearance: none; background: transparent; border: 1px solid var(--edge); border-radius: 2px;
-  color: var(--mute); font-family: var(--chrome); font-weight: 600; font-size: .6rem; letter-spacing: .08em;
+  color: var(--mute); font-family: var(--chrome); font-weight: 600; font-size: var(--fs-tiny); letter-spacing: .08em;
   padding: .22rem .5rem; cursor: pointer; white-space: nowrap;
 }
 .filters button[aria-pressed=true] { border-color: var(--hot); color: var(--hot) }
@@ -217,15 +217,15 @@ body[data-mode=note] .notepane { display: flex }
 body[data-filter=nt] .note:not([data-nt=true]):not([aria-current=true]),
 body[data-filter=low] .note:not([data-low=true]):not([aria-current=true]) { display: none }
 .note:hover { background: rgba(255, 255, 255, .03) }
-.note .n { font-family: var(--data); font-size: .68rem; color: var(--hot); padding-top: .15rem; display: flex; align-items: flex-start; justify-content: center }
+.note .n { font-family: var(--data); font-size: var(--fs-xs); color: var(--hot); padding-top: .15rem; display: flex; align-items: flex-start; justify-content: center }
 .note[aria-current=true] .n { font-weight: 500 }
-.note .z { font-family: var(--doc); font-weight: 700; font-size: .92rem; color: #FF7A4A; line-height: 1.55 }
-.note .e { font-size: .72rem; color: var(--mute); line-height: 1.5; margin-top: .25rem }
+.note .z { font-family: var(--doc); font-weight: 700; font-size: var(--fs-lg); color: #FF7A4A; line-height: 1.55 }
+.note .e { font-size: var(--fs-xs); color: var(--mute); line-height: 1.5; margin-top: .25rem }
 .note .nt {
-  font-family: var(--doc); font-size: .74rem; color: var(--cool); line-height: 1.6;
+  font-family: var(--doc); font-size: var(--fs-sm); color: var(--cool); line-height: 1.6;
   margin-top: .4rem; padding-left: .6rem; border-left: 2px solid rgba(65, 201, 255, .3);
 }
-.note .flag { font-family: var(--data); font-size: .58rem; color: var(--hot); margin-top: .3rem }
+.note .flag { font-family: var(--data); font-size: var(--fs-micro); color: var(--hot); margin-top: .3rem }
 
 body[data-mode=off] .acetate { opacity: 0; pointer-events: none }
 body[data-mode=dot] .blk :is(.veil, .txt), body[data-mode=dot] .corner { opacity: 0 }
@@ -246,25 +246,25 @@ body[data-mode=dot] .blk[aria-current=true] .corner { opacity: 1; transition: op
 .hold {
   appearance: none; flex: 0 0 auto; width: 10.5rem; border: 0; border-right: 1px solid var(--edge);
   background: transparent; color: var(--pale); cursor: pointer; font-family: var(--chrome); font-weight: 700;
-  font-size: .76rem; letter-spacing: .14em; display: flex; flex-direction: column; align-items: center;
+  font-size: var(--fs-sm); letter-spacing: .14em; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: .3rem; touch-action: none; user-select: none; -webkit-user-select: none;
 }
-.hold small { font-family: var(--data); font-size: .54rem; letter-spacing: 0; color: var(--mute); font-weight: 400 }
+.hold small { font-family: var(--data); font-size: var(--fs-micro); letter-spacing: 0; color: var(--mute); font-weight: 400 }
 .hold:active, body.lifted .hold { background: var(--cool); color: #04121B }
 .insp { flex: 1 1 auto; padding: .7rem 1rem; display: flex; flex-direction: column; gap: .35rem; min-width: 0; overflow: auto }
 .row { display: flex; gap: .8rem; align-items: baseline; flex-wrap: wrap }
-.tag { font-family: var(--data); font-size: .54rem; color: var(--mute); flex: 0 0 3rem }
-.src { font-size: .76rem; color: var(--mute); line-height: 1.45; flex: 1 1 13rem; min-width: 0 }
+.tag { font-family: var(--data); font-size: var(--fs-micro); color: var(--mute); flex: 0 0 3rem }
+.src { font-size: var(--fs-sm); color: var(--mute); line-height: 1.45; flex: 1 1 13rem; min-width: 0 }
 .tgt {
-  font-family: var(--doc); font-weight: 500; font-size: .86rem; color: var(--hot); line-height: 1.5;
+  font-family: var(--doc); font-weight: 500; font-size: var(--fs-base); color: var(--hot); line-height: 1.5;
   flex: 1 1 13rem; min-width: 0; border: 1px dashed var(--edge); border-radius: 2px; padding: .22rem .4rem; outline: none;
 }
 .tgt:focus { border-color: var(--hot); border-style: solid }
-.meta { display: flex; gap: 1.1rem; font-family: var(--data); font-size: .56rem; color: var(--mute); flex-wrap: wrap }
+.meta { display: flex; gap: 1.1rem; font-family: var(--data); font-size: var(--fs-micro); color: var(--mute); flex-wrap: wrap }
 .meta b { color: var(--pale); font-weight: 400 }
 .conf i { display: inline-block; width: .36rem; height: .36rem; border-radius: 50%; background: var(--cool); margin-right: .3rem }
 .conf.low i { background: var(--hot) }
-.empty { color: var(--mute); font-size: .74rem }
+.empty { color: var(--mute); font-size: var(--fs-sm) }
 
 /* ── 翻譯紀錄面板 ───────────────────────────── */
 .histPanel {
@@ -282,11 +282,11 @@ body[data-mode=dot] .blk[aria-current=true] .corner { opacity: 1; transition: op
   padding: calc(.8rem + env(safe-area-inset-top)) 1rem .8rem;
   border-bottom: 1px solid var(--edge);
 }
-.histHead h2 { font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: var(--pale); font-weight: 700 }
-.histHead span { font-family: var(--data); font-size: .58rem; color: var(--mute) }
+.histHead h2 { font-size: var(--fs-xs); letter-spacing: .16em; text-transform: uppercase; color: var(--pale); font-weight: 700 }
+.histHead span { font-family: var(--data); font-size: var(--fs-micro); color: var(--mute) }
 .histClose {
   margin-left: auto; appearance: none; background: transparent; border: 1px solid var(--edge);
-  border-radius: 2px; color: var(--mute); font-size: .8rem; padding: .25rem .55rem; cursor: pointer;
+  border-radius: 2px; color: var(--mute); font-size: var(--fs-sm); padding: .25rem .55rem; cursor: pointer;
 }
 .histClose:hover { border-color: var(--cool); color: var(--cool) }
 .histList {
@@ -302,17 +302,17 @@ body[data-mode=dot] .blk[aria-current=true] .corner { opacity: 1; transition: op
 .histItem:hover { background: rgba(255, 255, 255, .03) }
 .histItem img { width: 4.4rem; height: 3.3rem; object-fit: cover; border-radius: 2px; border: 1px solid var(--edge) }
 .histItem .t {
-  font-family: var(--doc); font-size: .8rem; font-weight: 500; color: var(--pale);
+  font-family: var(--doc); font-size: var(--fs-sm); font-weight: 500; color: var(--pale);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .histTx { min-width: 0 }
-.histItem .m { font-family: var(--data); font-size: .56rem; color: var(--mute); margin-top: .2rem }
+.histItem .m { font-family: var(--data); font-size: var(--fs-micro); color: var(--mute); margin-top: .2rem }
 .histDel {
   appearance: none; border: 1px solid var(--edge); background: transparent; color: var(--mute);
-  border-radius: 2px; font-size: .58rem; letter-spacing: .06em; padding: .3rem .5rem; cursor: pointer;
+  border-radius: 2px; font-size: var(--fs-micro); letter-spacing: .06em; padding: .3rem .5rem; cursor: pointer;
 }
 .histDel:hover { border-color: var(--hot-deep); color: var(--hot-deep) }
-.histEmpty { padding: 2.2rem 1rem; color: var(--mute); font-size: .78rem; line-height: 1.8; text-align: center; font-family: var(--doc) }
+.histEmpty { padding: 2.2rem 1rem; color: var(--mute); font-size: var(--fs-sm); line-height: 1.8; text-align: center; font-family: var(--doc) }
 
 /* 寬螢幕(含橫向手機)的 C 註解:圖左・註解右並排,圖用滿高度 */
 @media (min-aspect-ratio: 13/9) {
@@ -324,11 +324,12 @@ body[data-mode=dot] .blk[aria-current=true] .corner { opacity: 1; transition: op
   .deck { flex-direction: column }
   .hold { width: 100%; border-right: 0; border-bottom: 1px solid var(--edge); padding: .7rem; flex-direction: row; gap: .6rem }
   /* 觸控目標放大 */
-  .seg button, .pick, .flip, .shoot, .mode { padding-top: .5rem; padding-bottom: .5rem }
+  .seg button, .pick, .flip, .shoot, .mode { padding-top: .42rem; padding-bottom: .42rem }
+  .bar { gap: .45rem; row-gap: .35rem }
   .stage { padding: .6rem }
-  /* 滑桿在手機上留著(縮放與疊層強度都是規格內的控制項),改成緊湊版;
-     鍵盤提示與副標在觸控裝置沒用,收掉換空間給滑桿 */
-  .dial { font-size: .52rem; gap: .3rem }
+  /* 滑桿在手機上留著(縮放與疊層強度都是規格內的控制項),字級不再壓小
+     (型級下限就是 --fs-micro),改用縮短滑桿與間距換空間 */
+  .dial { gap: .3rem }
   .dial input { width: 4.2rem }
   .dial b { min-width: 1.9rem }
   .seg button kbd, .flip kbd { display: none }
@@ -341,11 +342,11 @@ body[data-mode=dot] .blk[aria-current=true] .corner { opacity: 1; transition: op
 @media (max-height:560px) {
   .bar { padding-top: calc(.35rem + env(safe-area-inset-top)); padding-bottom: .35rem; gap: .55rem; row-gap: .25rem }
   .mark span { display: none }
-  .dial { font-size: .5rem; gap: .25rem }
+  .dial { gap: .25rem }
   .dial input { width: 3.4rem }
   .stage { padding: .55rem }
   .deck { min-height: 3.4rem }
-  .hold { width: 8rem; font-size: .66rem; letter-spacing: .08em }
+  .hold { width: 8rem; font-size: var(--fs-xs); letter-spacing: .08em }
   .hold small { display: none }
   .insp { padding: .45rem .8rem; gap: .25rem }
   .meta { display: none }

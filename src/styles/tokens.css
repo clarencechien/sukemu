@@ -14,5 +14,18 @@
   --chrome: 'IBM Plex Sans Condensed', system-ui, sans-serif;
   --data: 'IBM Plex Mono', ui-monospace, monospace;
   --doc: 'Noto Sans TC', system-ui, sans-serif;
+
+  /* 型級(2026-08 重訂)。原本散落 25 種字級、8–10px 佔多數,低於行動裝置可讀下限,
+     整體上調 1–2 級並收斂成一套階梯——以後要再調只改這裡,不要在元件裡寫死數值。
+     --fs-micro 是硬下限(12px):再小的只能是純裝飾,不能是使用者要讀的字。
+     注意:圖上的疊字不吃這套(它用 --u,隨圖片寬度縮放,見 viewer.css .blk .txt)。 */
+  --fs-micro: .75rem;   /* 12.0px — 數據標籤、時間戳、座標 */
+  --fs-tiny:  .82rem;   /* 13.1px — 次要按鈕、分段控制 */
+  --fs-xs:    .88rem;   /* 14.1px — 面板標題、篩選 */
+  --fs-sm:    .95rem;   /* 15.2px — 輔助說明、原文 */
+  --fs-base: 1.05rem;   /* 16.8px — 內文、可編輯譯文 */
+  --fs-lg:   1.18rem;   /* 18.9px — 註解欄譯文 */
+  --fs-xl:   1.4rem;    /* 22.4px */
+  --fs-2xl:  2.15rem;   /* 34.4px — 登入頁 wordmark */
   --u: 7px;             /* 標註字級單位 = 圖片顯示寬度/100,由 JS 寫入 */
 }
