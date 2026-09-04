@@ -241,7 +241,7 @@ HSTS 與 TLS 版本另外開:**SSL/TLS → Edge Certificates → Enable HSTS**,�
 | **Transform Rule** | phase 連 entrypoint 都沒有,**從未建立** | ✅ 已建並線上驗證 |
 | family-feast `MIGRATE_TOKEN` | 端點已於 `b06d335` 移除,secret 仍在 | ✅ 已刪 |
 
-**同日事故:dashboard 上的 CSP 把 mahou 的 ambient 背景全擋掉**
+**同日事故:一份只照單一頁面寫的 CSP 把 mahou 的 ambient 背景全擋掉**
 
 補完 zone headers 之後,`mahou.ai-apps.work/ambient` 整片背景變黑。console:
 
@@ -250,18 +250,30 @@ Refused to load the image 'https://family-feast.ai-apps.work/media/...'
 because it violates the following CSP directive: "img-src 'self' data: blob:"
 ```
 
-那條 CSP **不在 mahou 的 repo 裡**——worker、public、wrangler.toml 都 grep 不到,
-是設在 Cloudflare dashboard 上的。它照 `/host` 的需求寫(`script-src` 放了 cdnjs,
-因為 host.html 用它載 QR code 產生器),但同一個站的 `/ambient` 背景是**跨站**讀
-family-feast 的 `/media/`,`img-src 'self'` 一律擋。順帶把 Cloudflare 自己注入的
-Web Analytics beacon 也擋了。
+那條 CSP 是同一天稍早的主控台 XSS 修補(mahou PR #44)寫進 `public/_headers` 的,
+照 `/host` 的需求列來源(`script-src` 放了 cdnjs,因為 host.html 用它載 QR code 產生器),
+`img-src` 只給 `'self' data: blob:`。`/host` 沒事——它的圖都同源;但同一個站的
+`/ambient` 背景是**跨站**讀 family-feast 的 `/media/`,整頁背景就黑了。
+順帶把 Cloudflare 自己注入的 Web Analytics beacon 也擋了。
 
-處置:CSP 收回 `public/_headers`(mahou `claude/ambient-csp-img-src`),涵蓋六個頁面
-實際用到的來源;dashboard 那條要移除,否則 `set static` 會蓋掉 repo 的標頭。
+處置:`public/_headers` 的 CSP 補上六個頁面實際用到的所有來源
+(mahou `claude/ambient-csp-img-src`,已合併)。
 
-> 這正好是 §1.4 那句「CSP 不能一刀切」的實例,而且多一層:**CSP 也不能只看一個頁面就寫**。
-> 同一個站的兩頁,外部資源可以完全不同。這也是為什麼 §3 只放 `nosniff`/`XFO` 這種
-> 全站一致的標頭——CSP 一旦離開 repo,壞掉的時候沒有人查得到原因。
+> **教訓一:CSP 不能只看一個頁面就寫。** 這是 §1.4「CSP 不能一刀切」再往下一層——
+> 不只是站與站之間,同一個站的兩頁外部資源也可以完全不同。加 CSP 前要把該站
+> 每一頁的外部來源都掃一遍,而且驗證要用瀏覽器數 console 的攔截次數,
+> `curl` 看得到標頭但不會執行 CSP。
+>
+> **教訓二:查「這個設定到底在哪」時,搜尋範圍與分支都要先確認。** 我一開始判定
+> 那條 CSP 是設在 dashboard 上的,理由是 repo 裡 grep 不到——但工作目錄還停在
+> PR #44 合併前的 main,而且 `--include=*.js/*.ts/*.toml` 這種副檔名過濾本來就
+> 配不到沒有副檔名的 `_headers`。**兩個錯誤疊起來剛好互相印證出一個錯的結論。**
+> 之後才發現線上送出的 CSP 與 repo 完全一致,才回頭推翻。
+>
+> **教訓三:整份覆寫既有的設定檔會靜默掉東西。** 修 CSP 時用 `cat >` 重寫
+> `public/_headers`,把裡面原有的 `Strict-Transport-Security` 與 `Permissions-Policy`
+> 一起刪掉,線上實測兩條都不見了(mahou `claude/headers-restore-hsts` 補回)。
+> 改這類「一個檔案裝很多條設定」的檔案要用 patch,收尾時逐條比對標頭集合。
 
 **三個貫穿整輪的教訓**
 
