@@ -23,7 +23,20 @@
 - 資料就是 R2 的 `config/allowlist.json` / `config/waitlist.json`,
   手動 `wrangler r2 object put` 也等價
 - 計數在每人一個的 Durable Object,**UTC 00:00(台灣早上 08:00)重置**;
-  P1 成功才扣額度,失敗不計
+  P1 成功才扣**張數**,失敗不扣
+
+> **「失敗不計費」要看是哪一種失敗。** 這句話以前把兩件事混為一談:
+>
+> | 失敗的樣子 | Google 收不收費 | 我們怎麼算 |
+> |---|---|---|
+> | 4xx / 5xx(請求被拒、上游掛掉) | **不收** | 放掉預扣,完全不入帳 |
+> | HTTP 200 但 JSON 解析失敗 | **收**(prompt + 已生成的 output/thinking token) | 張數不扣,**TWD 照樣入帳** |
+>
+> 第二種是真的會發生的:輸出被 `MAX_TOKENS` 截斷、safety block 回空 candidates、
+> 模型在 JSON 前面夾一段前言。而 P1 的成本八成以上在 output —— 也就是**最貴的那一段
+> 已經產生了**。2026-09-04 之前這些的 `usageMetadata` 跟著例外一起被丟掉,三道保險絲
+> 對「反覆送會讓模型吐爛 JSON 的圖」這條路徑完全無感。現在 `generateJSON` 會拋
+> 帶著 usage 的 `BilledError`,由 `settleFailure()` 入帳。
 
 **錢包保險絲共三道,P1 與 P2 都檢查**(單位對齊計費單位,見
 [gemini-api-lessons.md](gemini-api-lessons.md)):

@@ -94,7 +94,7 @@ function modelFor(env: Env, mode: ModelMode, pass: 'p1' | 'p2'): string {
   return (pass === 'p2' ? env.FAST_MODEL_P2 : '') || env.FAST_MODEL || 'gemini-3.5-flash-lite';
 }
 
-async function generateJSON(
+export async function generateJSON(
   env: Env,
   model: string,
   parts: Part[],
@@ -141,7 +141,39 @@ async function generateJSON(
     inTok: um.promptTokenCount ?? 0,
     outTok: (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0),
   };
-  return { data: JSON.parse(text), usage };
+  // ⚠️ 這裡是唯一「Google 已經收費、但可能還是會 throw」的位置。
+  // JSON.parse 失敗的情況都是真的會發生的:輸出被 MAX_TOKENS 截斷、
+  // safety block 回空 candidates、模型夾雜非 JSON 的前言。
+  // 這些 Google 一樣照 prompt + 已生成的 output/thinking token 計費
+  // (而 P1 的成本八成以上在 output),但先前 usage 就跟著例外一起消失了 ——
+  // 三道保險絲對這條路徑完全無感。把 usage 掛在錯誤上帶出去。
+  try {
+    return { data: JSON.parse(text), usage };
+  } catch (e) {
+    throw new BilledError(
+      `Gemini ${model} 回了 200 但內容不是合法 JSON(${(e as Error).message});` +
+        `已生成 ${usage.outTok} 個 output token,這一發 Google 會計費`,
+      usage,
+      model,
+    );
+  }
+}
+
+/**
+ * HTTP 200 之後才失敗的錯誤 —— 也就是**已經產生費用**的那一種。
+ *
+ * 4xx/5xx 不會走這條(Google 不收費),所以呼叫端可以只憑型別決定要不要入帳。
+ */
+export class BilledError extends Error {
+  readonly usage: TokenUsage;
+  /** 哪個模型 —— 單價按模型算,呼叫端要用它換成 TWD。 */
+  readonly model: string;
+  constructor(message: string, usage: TokenUsage, model: string) {
+    super(message);
+    this.name = 'BilledError';
+    this.usage = usage;
+    this.model = model;
+  }
 }
 
 /* 各模型單價(USD / 百萬 token):[輸入, 輸出],輸出價含 thinking token。
@@ -242,8 +274,19 @@ export async function runP1(env: Env, image: string, mime: string, mode: ModelMo
   const out = data as { lang?: string; blocks?: Record<string, unknown>[] };
   const { blocks, scaleApplied } = normalizeBlocks(out.blocks ?? [], iw, ih);
   if (scaleApplied) console.log(`[p1] ${model} 座標不是 0–100 百分比,已按 ${scaleApplied} 規格換算`);
-  return { lang: String(out.lang ?? '??').toUpperCase(), blocks, usage, model, mode };
+  return { lang: safeLang(out.lang), blocks, usage, model, mode };
 }
+
+/**
+ * 模型判讀出來的語言代碼。**這是模型輸出,不是我們產生的字串** —— prompt 要它回
+ * 語言代碼,但沒有任何機制保證它照做,而前端兩處把這個值拼進 innerHTML。
+ * 收成 2–3 個大寫字母,其餘一律 '??':真正的語言代碼本來就長這樣,
+ * 而白名單比逃逸可靠 —— 逃逸要每個出口記得做一次。
+ */
+export const safeLang = (v: unknown) => {
+  const s = String(v ?? '').trim().toUpperCase();
+  return /^[A-Z]{2,3}$/.test(s) ? s : '??';
+};
 
 const squash = (s: string) => s.replace(/\s+/g, '').toLowerCase();
 

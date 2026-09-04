@@ -2,6 +2,13 @@ import type { Block, Doc, Filter, Mode, Result } from '../types';
 import { LOW_CONFIDENCE } from '../types';
 import type { P2Edit } from '../api';
 
+/** `<b>正體中文</b>` —— 語言列固定的那一半,拿來搭配 textContent 用。 */
+function zhBold() {
+  const b = document.createElement('b');
+  b.textContent = '正體中文';
+  return b;
+}
+
 export type Viewer = {
   /** 新增一份文件(上傳結果)並切過去顯示 */
   addDoc(doc: Doc): void;
@@ -53,7 +60,7 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
       noteEls = [];
       pins = [];
       cur = -1;
-      langs.innerHTML = '… → <b>正體中文</b>';
+      langs.replaceChildren(document.createTextNode('… → '), zhBold());
       ncount.textContent = '';
       insp.innerHTML = '<div class="empty">📷 拍照、上傳或貼上圖片開始 — 結果會存進「紀錄」,只在這台裝置上</div>';
       return;
@@ -61,7 +68,9 @@ export function initViewer(onEdit?: (result: Result) => void): Viewer {
     const { src, result } = docs[docIdx];
     plate.src = src;
     plate.alt = result.name;
-    langs.innerHTML = `${result.lang} → <b>正體中文</b>`;
+    // result.lang 是模型輸出。worker 端已收成 ^[A-Z]{2,3}$,這裡照樣不拼字串:
+    // 兩道都在,才不會因為哪天有人放寬 worker 那一道就默默開了一個注入點。
+    langs.replaceChildren(document.createTextNode(`${result.lang} → `), zhBold());
     acetate.innerHTML = '';
     notes.innerHTML = '';
     noteEls = [];
