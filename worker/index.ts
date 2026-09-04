@@ -7,6 +7,7 @@ import {
   addToWaitlist,
   cookieGet,
   cookieSet,
+  devEnv,
   randomHex,
   resolveUser,
   sessionFrom,
@@ -53,6 +54,9 @@ export interface Env {
   GLOBAL_DAILY_TWD?: string;
   // 安全與計價
   CANONICAL_HOST?: string;
+  /** 開發用 Email 直登的總開關。**只放 .dev.vars**(已 gitignore、不會被部署);
+   *  設成 '1' 且 host 是本機時,/api/login 才開放。正式站絕不要設。 */
+  DEV_LOGIN?: string;
   /** 覆寫/補充模型單價表:{"model-id":[輸入USD/M, 輸出USD/M]} */
   MODEL_PRICES?: string;
   USD_TWD?: string;
@@ -60,6 +64,9 @@ export interface Env {
 
 /** base64 上限 ~14MB(前端已縮到長邊 2048,實際遠小於此) */
 const MAX_IMAGE_B64 = 14_000_000;
+/** P2 的輸入上限。真實 P1 輸出 30 塊只有幾 KB,這兩個值對正常使用完全無感 */
+const MAX_BLOCK_CHARS = 2_000;
+const MAX_BLOCKS_BYTES = 64_000;
 
 const json = (data: unknown, init?: ResponseInit) => Response.json(data, init);
 const bad = (msg: string, status = 400) => json({ ok: false, error: msg }, { status });
@@ -94,40 +101,83 @@ const readUsage = async (env: Env, email: string): Promise<Usage> =>
 /** 全站計數共用同一顆 DO;'__global__' 不含 @,不會與任何 email 撞名 */
 const GLOBAL = '__global__';
 
-/* 錢包保險絲:張數(分級)+ 每人每日 TWD + 全站每日 TWD 三道門檻。
-   P1、P2 都要過(P2 曾是唯一沒有上限的付費入口)。
-   已知 race:read-then-act + waitUntil 事後入帳,併發下可微幅超額——
-   量級是「多一兩張圖」不是「多一個量級」,接受;要嚴格就把檢查搬進 DO。 */
-async function checkBudgets(env: Env, email: string, user: UserInfo, countImage: boolean): Promise<Response | null> {
-  const [mine, site] = await Promise.all([
-    readUsage(env, email).catch(() => null),
-    readUsage(env, GLOBAL).catch(() => null),
-  ]);
-  if (countImage && mine && user.limitImages > 0 && mine.count >= user.limitImages) {
-    return bad(`今日額度已用完(${mine.count}/${user.limitImages} 張),台灣時間早上 8 點重置`, 429);
-  }
-  const twdLimit = Number(env.DAILY_TWD_LIMIT || 0);
-  if (mine && twdLimit > 0 && mine.costTwd >= twdLimit) {
-    return bad(`今日成本額度已用完(約 NT$${mine.costTwd.toFixed(1)}),台灣時間早上 8 點重置`, 429);
-  }
-  const siteLimit = Number(env.GLOBAL_DAILY_TWD || 0);
-  if (site && siteLimit > 0 && site.costTwd >= siteLimit) {
-    return bad('今日全站預算已用完,明天再來(台灣時間早上 8 點重置)', 429);
-  }
-  return null;
+/* 錢包保險絲:張數(分級)+ 每人每日 TWD + 全站每日 TWD 三道門檻,P1、P2 都要過。
+
+   ⚠️ 2026-09-04 改寫。原本是 read-then-act:向 DO 讀 usage → 呼叫 Gemini → 事後
+   waitUntil 入帳。舊註解說 race 只會「多一兩張圖」,那個估計假設請求接近序列 ——
+   但競態窗口是**整段 Gemini 延遲**(精準模式單張約 13 秒),而前端的 busy 旗標只是
+   UI 防呆。任何腳本都能同時發 N 個 /api/p1,所以是 N 倍不是 +1;GLOBAL_DAILY_TWD
+   也能被單一使用者一次 burst 穿透。另外舊版在 DO 讀取失敗時是 fail-open
+   (`.catch(() => null)` 之後每道檢查都是 `mine && …`)。
+
+   現在:檢查與預扣在 DO 內一次做完(DO 單執行緒,天然序列化),Gemini 回來後結算
+   實際用量,失敗則放掉預扣(維持「失敗不扣額度」)。DO 出錯一律 fail-closed。 */
+
+/** 預扣用的保守估值:估高不估低,結算時換成實際數字。
+ *  精準模式一般菜單實測約 NT$1.37/張(docs/adr/0001),取 3 是留給大圖與重試。 */
+const EST_TWD_P1 = 3;
+const EST_TWD_P2 = 1.5;
+/** 每人同時進行中的請求上限。正常使用者一次只送一張,3 是留給手滑與重試 */
+const MAX_INFLIGHT = 3;
+
+type Reservation = { mine: string; site: string };
+
+async function reserveOne(
+  env: Env, key: string, body: Record<string, number>,
+): Promise<{ ok: true; id: string } | { ok: false; reason: string; used?: number; limit?: number }> {
+  const r = await quotaStub(env, key).fetch('https://do/reserve', { method: 'POST', body: JSON.stringify(body) });
+  return r.json();
 }
 
-/** 用量入帳:個人與全站各記一筆(waitUntil,不擋回應) */
-function recordUsage(
-  ctx: ExecutionContext,
-  env: Env,
-  email: string,
+const releaseOne = (env: Env, key: string, id: string) =>
+  quotaStub(env, key).fetch('https://do/release', { method: 'POST', body: JSON.stringify({ id }) });
+
+/** 成功回 Reservation;被擋或 DO 出錯回 Response(fail-closed) */
+async function reserveBudgets(
+  env: Env, email: string, user: UserInfo, images: number, estTwd: number,
+): Promise<Reservation | Response> {
+  const twdLimit = Number(env.DAILY_TWD_LIMIT || 0);
+  const siteLimit = Number(env.GLOBAL_DAILY_TWD || 0);
+  try {
+    const mine = await reserveOne(env, email, {
+      images, estTwd, limitImages: images > 0 ? user.limitImages : 0, twdLimit, maxInflight: MAX_INFLIGHT,
+    });
+    if (!mine.ok) {
+      if (mine.reason === 'inflight') return bad('同時處理中的請求太多,請等前一張跑完', 429);
+      if (mine.reason === 'images') {
+        return bad(`今日額度已用完(${mine.used}/${mine.limit} 張),台灣時間早上 8 點重置`, 429);
+      }
+      return bad(`今日成本額度已用完(約 NT$${Number(mine.used ?? 0).toFixed(1)}),台灣時間早上 8 點重置`, 429);
+    }
+    // 全站預算:同一顆 DO,不看張數也不看 inflight(全站的並行本來就不該卡在這)
+    const site = await reserveOne(env, GLOBAL, { images, estTwd, limitImages: 0, twdLimit: siteLimit, maxInflight: 0 });
+    if (!site.ok) {
+      await releaseOne(env, email, mine.id).catch(() => {});
+      return bad('今日全站預算已用完,明天再來(台灣時間早上 8 點重置)', 429);
+    }
+    return { mine: mine.id, site: site.id };
+  } catch {
+    // ⚠️ 舊版在這裡是 fail-open。配額服務掛掉的期間等於沒有上限,而這三道是錢包的
+    // 最後一關(供應商端的 spend cap 才是硬上限)。寧可暫時不能用,也不要沒有上限。
+    return bad('額度服務暫時無法使用,請稍後再試', 503);
+  }
+}
+
+/** 結算實際用量(waitUntil,不擋回應) */
+function settleBudgets(
+  ctx: ExecutionContext, env: Env, email: string, res: Reservation,
   add: { images: number; inTok: number; outTok: number; costTwd: number },
 ) {
-  const body = JSON.stringify(add);
-  for (const key of [email, GLOBAL]) {
-    ctx.waitUntil(quotaStub(env, key).fetch('https://do/add', { method: 'POST', body }));
-  }
+  ctx.waitUntil(quotaStub(env, email).fetch('https://do/settle',
+    { method: 'POST', body: JSON.stringify({ id: res.mine, ...add }) }));
+  ctx.waitUntil(quotaStub(env, GLOBAL).fetch('https://do/settle',
+    { method: 'POST', body: JSON.stringify({ id: res.site, ...add }) }));
+}
+
+/** 失敗:放掉預扣,不入帳 */
+function releaseBudgets(ctx: ExecutionContext, env: Env, email: string, res: Reservation) {
+  ctx.waitUntil(releaseOne(env, email, res.mine).catch(() => {}));
+  ctx.waitUntil(releaseOne(env, GLOBAL, res.site).catch(() => {}));
 }
 
 export default {
@@ -247,8 +297,12 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   }
 
   // 開發用 Email 直登:只在未設定 OIDC 時開放
+  // 開發用 Email 直登:兩道閘門都成立才開 —— DEV_LOGIN=1(只放 .dev.vars,不會被部署)
+  // 且 host 是本機。**不要**拿「有沒有設 OIDC」當判準:那會讓「忘了設 OIDC」等於把
+  // 零憑證的 admin 登入開給全世界(kikemu 2026-09-04 實際發生過)。
   if (p === '/api/login' && req.method === 'POST') {
-    if (env.GOOGLE_CLIENT_ID) return bad('已啟用 Google 登入,請走 /auth/login', 403);
+    const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    if (!devEnv(env) || !local) return bad('此端點僅供本機開發使用', 403);
     const { email: raw } = (await req.json().catch(() => ({}))) as { email?: string };
     const email = (raw ?? '').trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('Email 格式不正確');
@@ -317,20 +371,27 @@ async function api(
       iw?: number;
       ih?: number;
     };
-    if (!image || !mime?.startsWith('image/')) return bad('缺少影像資料');
+    if (!image || typeof image !== 'string' || !mime?.startsWith('image/')) return bad('缺少影像資料');
     if (image.length > MAX_IMAGE_B64) return bad('影像過大,請縮小後再試', 413);
+    if (mime.length > 64) return bad('mime 過長', 400);
+    if (typeof name === 'string' && name.length > 200) return bad('檔名過長', 400);
 
-    const denied = await checkBudgets(env, email, user, true);
-    if (denied) return denied;
+    const res = await reserveBudgets(env, email, user, 1, EST_TWD_P1);
+    if (res instanceof Response) return res;
 
-    const { lang, blocks, usage, model, mode } = await runP1(
-      env, image, mime, resolveMode(env, modelMode),
-      Number(iw) || undefined, Number(ih) || undefined,
-    );
-    const twd = estCostTwd(env, model, usage);
-    // 成功才計費(失敗不扣額度)
-    recordUsage(ctx, env, email, { images: 1, ...usage, costTwd: twd });
-    return json({ ok: true, result: { name: name || 'photo', lang, blocks }, usage: { ...usage, twd, model, mode } });
+    try {
+      const { lang, blocks, usage, model, mode } = await runP1(
+        env, image, mime, resolveMode(env, modelMode),
+        Number(iw) || undefined, Number(ih) || undefined,
+      );
+      const twd = estCostTwd(env, model, usage);
+      // 成功才計費(失敗不扣額度):預扣換成實際用量
+      settleBudgets(ctx, env, email, res, { images: 1, ...usage, costTwd: twd });
+      return json({ ok: true, result: { name: name || 'photo', lang, blocks }, usage: { ...usage, twd, model, mode } });
+    } catch (e) {
+      releaseBudgets(ctx, env, email, res);
+      throw e;
+    }
   }
 
   if (path === '/api/p2' && req.method === 'POST') {
@@ -341,13 +402,33 @@ async function api(
     };
     if (!Array.isArray(blocks) || !blocks.length) return bad('缺少文字塊');
     if (blocks.length > 200) return bad('文字塊過多', 413);
+    // ⚠️ 只限塊數是不夠的:每塊的字串長度原本完全沒有上限,而整包 blocks 是直接
+    // 串進 prompt 的(gemini.ts runP2)。Workers 的 request body 上限是 100 MB,
+    // 足以塞到模型 context 上限 —— 以內建牌價估,單一請求最多約 NT$47 的輸入,
+    // 而 DAILY_TWD_LIMIT 是「事前檢查、事後入帳」,擋不住這一發。
+    // 真實的 P1 輸出 30 塊也只有幾 KB,所以這些上限對正常使用毫無感覺。
+    for (const b of blocks) {
+      if (!b || typeof b !== 'object' || typeof b.en !== 'string' || typeof b.zh !== 'string') {
+        return bad('文字塊格式不正確', 400);
+      }
+      if (b.en.length > MAX_BLOCK_CHARS || b.zh.length > MAX_BLOCK_CHARS) {
+        return bad('單一文字塊過長', 413);
+      }
+    }
+    if (JSON.stringify(blocks).length > MAX_BLOCKS_BYTES) return bad('文字塊總量過大', 413);
+    if (typeof lang === 'string' && lang.length > 16) return bad('lang 過長', 400);
     // P2 也是付費入口,同一組保險絲(不含張數——張數在 P1 已扣)
-    const denied = await checkBudgets(env, email, user, false);
-    if (denied) return denied;
-    const { edits, usage, model, mode } = await runP2(env, lang || '??', blocks, resolveMode(env, modelMode));
-    const twd = estCostTwd(env, model, usage);
-    recordUsage(ctx, env, email, { images: 0, ...usage, costTwd: twd });
-    return json({ ok: true, edits, usage: { ...usage, twd, model, mode } });
+    const res = await reserveBudgets(env, email, user, 0, EST_TWD_P2);
+    if (res instanceof Response) return res;
+    try {
+      const { edits, usage, model, mode } = await runP2(env, lang || '??', blocks, resolveMode(env, modelMode));
+      const twd = estCostTwd(env, model, usage);
+      settleBudgets(ctx, env, email, res, { images: 0, ...usage, costTwd: twd });
+      return json({ ok: true, edits, usage: { ...usage, twd, model, mode } });
+    } catch (e) {
+      releaseBudgets(ctx, env, email, res);
+      throw e;
+    }
   }
 
   return bad('不存在的 API', 404);
