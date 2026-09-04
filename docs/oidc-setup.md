@@ -49,12 +49,28 @@ npm run deploy
   WAF 與 Rate Limiting 全繞過。設定碼層級關掉的好處是:就算 dashboard 被誤開,
   下次部署也會關回來。對外一律走自訂網域。
   > 代價:預覽分支不再有可點的 URL。要臨時開回來就把 `preview_urls` 改成 `true`。
-- `wrangler.jsonc` 的 `CANONICAL_HOST` 填正式網域(例 `sukemu.ai-apps.work`)→
-  非正式 host 一律 301/403,這是上一條的程式端縱深。留空 = 不檢查。
-- **Turnstile(可選)**:Cloudflare Dashboard → Turnstile → 新增 widget,
-  **domain 要填 sukemu 自己的網域**(不能沿用 manemu 的 widget)→
-  site key 填 `TURNSTILE_SITE_KEY` var、`npx wrangler secret put TURNSTILE_SECRET`。
+- `wrangler.jsonc` 的 `CANONICAL_HOST` **已經填好** `sukemu.ai-apps.work` →
+  非正式 host 一律 301/403,這是上一條的程式端縱深。自訂網域也寫進了
+  `routes`(`custom_domain: true`),部署即宣告,不再只存在 dashboard。
+- **Turnstile(已啟用)**:**與 manemu 共用同一個 widget、同一把 secret**。
+  現況就是這樣設的,`wrangler.jsonc` 的 `TURNSTILE_SITE_KEY` 與
+  `docs/cf-security-baseline.md` §1.8 講的是同一件事。
+
+  > ⚠️ 這一段以前寫的是「不能沿用 manemu 的 widget,要新建一個」——**那是錯的**,
+  > 而且照著做會踩坑:新建 widget 拿到新的 site key,但 `TURNSTILE_SECRET`
+  > 還是舊那把,於是每次登入都 403,而症狀看起來像「Turnstile 壞了」。
+
+  要沿用就確認那個 widget 的 hostname 清單**包含 `sukemu.ai-apps.work`**,
+  否則挑戰在 sukemu 的頁面上根本渲染不出來。
+  site key 填 `TURNSTILE_SITE_KEY` var(**是 var 不是 dashboard 設定**,
+  在 dashboard 手改會被下次 deploy 蓋掉)、
+  `npx wrangler secret put TURNSTILE_SECRET`。
   **兩者要成對設定**:只設其中一個 → Worker 自動停用挑戰(見 §6 疑難排解)。
+
+  共用 secret 的代價,以及對應的防線:secret 一樣就表示**在 manemu 頁面解出來的
+  token 也驗得過 sukemu**。token 是單次有效,所以不是「免解題繞過」,但少了站別
+  綁定。`worker/index.ts` 的 siteverify 因此會比對回傳的 `hostname`,
+  不是只看 `success`。
 - Rate Limiting(Free 1 條)花在 `/auth/*`;Bot Fight Mode、Always Use HTTPS 免費全開。
 
 ## 5. 疑難排解
@@ -67,7 +83,8 @@ npm run deploy
 |---|---|---|
 | `turnstileSiteKey: null` 但你設過 `TURNSTILE_SECRET` | **只設了一半**:前端渲染不出元件、後端卻要求 token | 補上 `TURNSTILE_SITE_KEY` var 後部署;或把 secret 刪掉(`wrangler secret delete TURNSTILE_SECRET`)完全停用 |
 | 有 site key,但手機常失敗、桌面正常 | 行動網路較常拿到**需要互動**的挑戰,使用者在勾選完成前就按了登入 | 已修:token 到手前按鈕禁用並顯示「驗證中…」 |
-| 兩者都設了仍失敗 | widget 的 domain 設錯(例如沿用 manemu 的 site key) | Turnstile 後台確認 widget 的 domain 是 sukemu 的網域 |
+| 兩者都設了仍失敗 | widget 的 hostname 清單沒有 `sukemu.ai-apps.work` | Turnstile 後台把 sukemu 的網域加進那個共用 widget |
+| log 出現 `token 是在 … 解的` | siteverify 回的 hostname 不是本站 —— 有人拿別站解的 token 來登入 | 正常情況不會出現;共用 secret 的站別綁定就是靠這一條 |
 
 > 現在只設一半時 Worker 會**自動停用**挑戰並在 log 留警告,不會再把登入鎖死;
 > 驗證失敗也一律導回 `/?err=challenge` 顯示可重試的訊息,不會停在裸 403 頁。

@@ -122,7 +122,7 @@
 
 | 控制 | sukemu | 說明 | 正式必備 |
 |---|:--:|---|:--:|
-| 模型/使用者衍生文字一律走 `textContent`,不進 `innerHTML` | ✅ | `src/ui/viewer.ts` 等;`innerHTML` 只組靜態骨架 | ✔ |
+| 模型/使用者衍生文字一律走 `textContent`,不進 `innerHTML` | ✅ | `src/ui/viewer.ts` 等;`innerHTML` 只組靜態骨架。**2026-09-04 修正**:`result.lang` 是模型輸出,先前在 `viewer.ts:64` 與 `history.ts:61` 被拼進 `innerHTML` —— 其餘欄位(zh/en/nt/name)確實都走 `textContent`,只有它漏了。現在 worker 端收成 `^[A-Z]{2,3}$`,前端兩處也改成 `textContent` | ✔ |
 | admin 頁輸出全部 `esc()` 跳脫 | ✅ | `public/admin.js` | ✔ |
 
 ### 1.8 sukemu 故意「沒有」的(有理由的取捨)

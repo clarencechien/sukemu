@@ -16,7 +16,7 @@ import {
   verifyGoogleIdToken,
   type UserInfo,
 } from './auth';
-import { estCostTwd, modeToggleEnabled, resolveMode, runP1, runP2 } from './gemini';
+import { BilledError, estCostTwd, modeToggleEnabled, resolveMode, runP1, runP2 } from './gemini';
 import { handleAdmin } from './admin';
 import type { Usage } from './quota';
 export { QuotaCounter } from './quota';
@@ -71,9 +71,26 @@ const MAX_BLOCKS_BYTES = 64_000;
 const json = (data: unknown, init?: ResponseInit) => Response.json(data, init);
 const bad = (msg: string, status = 400) => json({ ok: false, error: msg }, { status });
 
+// CSP。三處值得留意:
+//
+// 1. style-src / font-src 放行 Google Fonts。index.html 從一開始就載入三套字型,
+//    但 CSP 沒給 —— 也就是正式站上 IBM Plex 與 Noto Sans TC **從來沒有載入過**,
+//    一直靜默 fallback 到系統字型,而沒有人看過 console。
+//    取捨:自託管更符合 default-src 'self',但 Noto Sans TC 是 CJK 字型,
+//    要自己做 subset 才不會變成幾 MB 的包袱,那是一條 build pipeline。
+//    第三條路是乾脆拿掉字型 —— 反正現在看到的就是 fallback 的樣子 —— 但那是
+//    設計決定不是安全決定,不該由這裡代做。所以放行,並且把理由寫在這裡。
+// 2. base-uri 'self':沒有這一條,一個注進來的 <base href> 就能把整頁的相對網址
+//    改寫到別人的網域。CSP 沒有 unsafe-inline,擋得住 script,擋不住這個。
+// 3. form-action 'self':同理,擋掉注進來的 <form action="https://…">。
 const SEC_HEADERS: Record<string, string> = {
   'content-security-policy':
-    "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self' https:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self'; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; " +
+    "frame-src https://challenges.cloudflare.com; connect-src 'self' https:; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src 'self' https://fonts.gstatic.com; " +
+    "img-src 'self' data: blob:; worker-src 'self'; object-src 'none'; " +
+    "base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
   'x-frame-options': 'DENY',
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'strict-origin-when-cross-origin',
@@ -180,6 +197,28 @@ function releaseBudgets(ctx: ExecutionContext, env: Env, email: string, res: Res
   ctx.waitUntil(releaseOne(env, GLOBAL, res.site).catch(() => {}));
 }
 
+/**
+ * 失敗的收尾。「失敗不計費」只有在**供應商也沒收費**時才成立。
+ *
+ * 4xx/5xx 是那種情況 —— 放掉預扣就好。但 HTTP 200 之後才炸的(輸出被截斷、
+ * safety block、模型夾雜非 JSON)Google 照樣按 prompt + 已生成的 output/thinking
+ * token 計費,而 P1 的成本八成以上在 output。那些先前完全不入帳,
+ * 於是三道保險絲對「反覆送會讓模型吐爛 JSON 的圖」這條路徑毫無感覺。
+ *
+ * 張數不扣(使用者沒拿到結果),但 TWD 一定要入帳 —— 錢包保險絲擋的是錢。
+ */
+function settleFailure(
+  ctx: ExecutionContext, env: Env, email: string, res: Reservation, err: unknown, phase: 'p1' | 'p2',
+) {
+  if (err instanceof BilledError) {
+    const twd = estCostTwd(env, err.model, err.usage);
+    console.warn(`[${phase}] 200 但解析失敗,已計費 NT$${twd.toFixed(3)}:${err.message}`);
+    settleBudgets(ctx, env, email, res, { images: 0, ...err.usage, costTwd: twd });
+    return;
+  }
+  releaseBudgets(ctx, env, email, res);
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
@@ -200,7 +239,8 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   const p = url.pathname;
 
   // 縱深防禦:設了 CANONICAL_HOST 之後,workers.dev 等非正式 host 一律導回正式網域
-  if (env.CANONICAL_HOST && url.hostname !== env.CANONICAL_HOST && url.hostname !== 'localhost') {
+  const localHost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  if (env.CANONICAL_HOST && url.hostname !== env.CANONICAL_HOST && !localHost) {
     if (req.method === 'GET' && !p.startsWith('/api')) {
       return Response.redirect(`https://${env.CANONICAL_HOST}${p}${url.search}`, 301);
     }
@@ -241,7 +281,19 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
           remoteip: req.headers.get('cf-connecting-ip') || '',
         }),
       });
-      if (!((await vr.json()) as { success: boolean }).success) {
+      // hostname 一定要比對。這個 widget 與 manemu 共用同一把 secret(見
+      // wrangler.jsonc 的 TURNSTILE_SITE_KEY),所以只看 success 的話,在 manemu
+      // 頁面解出來的 token 也能過 sukemu 這一關。token 是單次有效,所以那不是
+      // 「免解題繞過」,但少了站別綁定 —— 一個能讓使用者在自己頁面解題的攻擊者
+      // 就能替 sukemu 收集通行證。localhost 例外:wrangler dev 拿到的 hostname
+      // 就是 localhost,不放行的話本機根本登不進去。
+      const vd = (await vr.json()) as { success: boolean; hostname?: string };
+      const hostOk =
+        !vd.hostname || vd.hostname === url.hostname || vd.hostname === 'localhost';
+      if (!vd.success || !hostOk) {
+        if (vd.success && !hostOk) {
+          console.warn(`[turnstile] token 是在 ${vd.hostname} 解的,不是 ${url.hostname}`);
+        }
         return new Response(null, { status: 302, headers: { location: '/?err=challenge' } });
       }
     }
@@ -389,7 +441,7 @@ async function api(
       settleBudgets(ctx, env, email, res, { images: 1, ...usage, costTwd: twd });
       return json({ ok: true, result: { name: name || 'photo', lang, blocks }, usage: { ...usage, twd, model, mode } });
     } catch (e) {
-      releaseBudgets(ctx, env, email, res);
+      settleFailure(ctx, env, email, res, e, 'p1');
       throw e;
     }
   }
@@ -426,7 +478,7 @@ async function api(
       settleBudgets(ctx, env, email, res, { images: 0, ...usage, costTwd: twd });
       return json({ ok: true, edits, usage: { ...usage, twd, model, mode } });
     } catch (e) {
-      releaseBudgets(ctx, env, email, res);
+      settleFailure(ctx, env, email, res, e, 'p2');
       throw e;
     }
   }

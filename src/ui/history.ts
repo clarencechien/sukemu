@@ -58,10 +58,14 @@ export function initHistory(viewer: Viewer) {
       item.className = 'histItem';
       item.tabIndex = 0;
       item.setAttribute('role', 'button');
+      // rec.lang 來自模型,而且這是**重播**:注入過一次的紀錄存進 IndexedDB 之後,
+      // 每次從「紀錄」開啟都會再注入一次。所以這裡不拼字串 —— .m 那格改填 textContent。
       item.innerHTML = `<img alt="" src="${u}"><div class="histTx"><div class="t"></div>
-        <div class="m">${rec.lang} · ${rec.blocks.length} 塊 · ${when}</div></div>
+        <div class="m"></div></div>
         <button class="histDel">刪除</button>`;
       (item.querySelector('.t') as HTMLElement).textContent = rec.blocks[0]?.zh || rec.name;
+      (item.querySelector('.m') as HTMLElement).textContent =
+        `${rec.lang} · ${rec.blocks.length} 塊 · ${when}`;
       item.onclick = e => {
         if ((e.target as HTMLElement).closest('.histDel')) {
           if (confirm('刪除這筆紀錄?')) docStore.remove(rec.id!).then(render);

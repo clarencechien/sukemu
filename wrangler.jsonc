@@ -8,6 +8,9 @@
   // 對外一律走自訂網域;程式端另有 CANONICAL_HOST 縱深(見 vars)。
   "workers_dev": false,
   "preview_urls": false,
+  // 自訂網域寫進版控:先前只綁在 dashboard,repo 裡看不出這個 worker 對外是哪個
+  // 網址,也沒有任何東西阻止別人在 dashboard 多加一條 route。部署即宣告。
+  "routes": [{ "pattern": "sukemu.ai-apps.work", "custom_domain": true }],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -50,8 +53,13 @@
     "GLOBAL_DAILY_TWD": "600",
     // 列在這裡的帳號一律 admin 級(無上限),可開 /admin 管理頁
     "ADMIN_EMAILS": "clarence.chien@gmail.com",
-    // 正式網域(如 sukemu.ai-apps.work):設了之後其他 host 一律 301/403;留空 = 不檢查
-    "CANONICAL_HOST": "",
+    // 正式網域:設了之後其他 host 一律 301/403;留空 = 不檢查。
+    // 為什麼要填:workers_dev 與 preview_urls 現在都關著,所以「只有一個 host
+    // 到得了」——但那是設定檔說了算的事,而 docs/oidc-setup.md §4 就明文提示
+    // 可以把 preview_urls 開回來。真的多一個 host 的時候,這一行是程式端唯一
+    // 擋得下來的縱深:新 host 會服務整套登入流程與 Gemini API。
+    // localhost 與 127.0.0.1 已豁免,不影響 wrangler dev。
+    "CANONICAL_HOST": "sukemu.ai-apps.work",
     // Turnstile site key 是公開值(本來就會出現在前端 HTML),放這裡沒問題;
     // TURNSTILE_SECRET 走 secret(wrangler secret put)。**兩者都設齊才會啟用**——
     // 只設一半會讓前端渲染不出元件、後端卻要求 token,每次登入必定 403(見 index.ts turnstileOn)。
