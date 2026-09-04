@@ -163,20 +163,50 @@
 路徑:Dashboard → `ai-apps.work` zone → **Rules → Transform Rules → Modify Response Header → Create**
 
 ```
-表達式:  (http.host wildcard "*.ai-apps.work")
-         and not (http.host in {"sukemu.ai-apps.work" "manemu.ai-apps.work"})
-動作:    Set static  X-Frame-Options            = DENY
-         Set static  X-Content-Type-Options      = nosniff
-         Set static  Referrer-Policy             = strict-origin-when-cross-origin
+表達式:  http.host wildcard "*.ai-apps.work"
+動作:    Set static  X-Content-Type-Options  = nosniff
+         Set static  X-Frame-Options         = DENY
 ```
-> 排除付費站,是因為它們的 worker 已自帶完整 headers,讓 app 自己的值權威。
 
-HSTS 另外開:**SSL/TLS → Edge Certificates → Enable HSTS**(zone 一次全開)。
+**✅ 2026-09-04 已實際建立並線上驗證**(snapdeck 的回應確認帶著這兩個標頭)。
 
-### ⚠️ 三個陷阱
-1. **CSP 不能放進這條全域規則** —— 每個 app 需求不同,全域塞一份不是弄壞 demo 就是寬鬆到沒用。CSP 各 app 自理。
-2. **`*.workers.dev` 不吃 zone 規則** —— 那是 Cloudflare 自己的網域,連 Transform Rules 都不能設,只能在**程式碼裡**加 header(`auth`、`bubbobgpt`、`drop-*`、`holy-cake` 都在這)。
-3. **`sw-tech.tk` 是另一個 zone** —— 要在它自己 zone 底下另設一條。
+> ⚠️ **這份設定在 2026-09-04 改過,上一版是錯的,不要照舊版做。** 舊版設三個標頭
+> 並排除 sukemu/manemu。兩個問題:
+>
+> **一、`Referrer-Policy` 不能放進來。** Transform Rule 的 `Set static` 是**覆寫**,而
+> kaburi、mahou、bentodrop 自己送的是更嚴格的 `no-referrer` —— 一條 zone-wide 規則會把
+> 它們**降級**成 `strict-origin-when-cross-origin`。這個標頭各 app 值不同,和 CSP 一樣
+> 屬於「不該全域化」的那一類。
+>
+> **二、拿掉第三個標頭之後,排除清單就沒有必要,而且有害。** 剩下這兩個標頭這裡沒有任何
+> 站需要別的值(沒人要 `SAMEORIGIN`,`nosniff` 也只有一個值),覆寫成相同的值是零影響。
+> 反過來說,排除 sukemu 會留下一個縫:它的 worker 只在部分路徑送 `SEC_HEADERS`,
+> `/api/*` 的 JSON 回應沒有 —— 排除掉等於兩邊都沒有,而 zone 規則正好能無痛補上。
+> **少一份要維護的名單,新開的 demo 站也自動被涵蓋,那本來就是這條規則存在的理由。**
+
+HSTS 與 TLS 版本另外開:**SSL/TLS → Edge Certificates → Enable HSTS**,同一頁把
+**Minimum TLS Version 設 1.2**。
+
+> ⚠️ **這兩項在 2026-09-04 之前一直是關的**,而這份文件與 manemu README 都已經寫成
+> 「已開」。實查結果是 `strict_transport_security.enabled: false`、`min_tls_version: "1.0"`。
+> **把「打算做」寫成「已經做」比沒寫更危險** —— 之後每一次稽核都會拿這份文件當基準。
+> 現在兩項都已設定完成。
+
+### ⚠️ 四個陷阱
+1. **不要建錯清單。** Transform Rules 頁面底下有三個各自獨立的清單:
+   `Modify Request Header` / `Modify Response Header` / `Rewrite URL`。
+   **Request header 是改「送進 Worker 的請求」,瀏覽器根本看不到** ——
+   在請求上設 `X-Frame-Options` 對安全完全沒有作用。要建在 **Modify Response Header** 那一區。
+   (2026-09-04 實際建錯過一次,畫面上唯一的差別是那行小字寫 "up to 30 **request** headers"。)
+2. **CSP 不能放進這條全域規則** —— 每個 app 需求不同,全域塞一份不是弄壞 demo 就是寬鬆到沒用。CSP 各 app 自理。`Referrer-Policy` 同理,見上面。
+3. **`*.workers.dev` 不吃 zone 規則** —— 那是 Cloudflare 自己的網域,連 Transform Rules 都不能設,只能在**程式碼裡**加 header(`auth`、`bubbobgpt`、`drop-*`、`holy-cake` 都在這)。
+4. **`sw-tech.tk` 是另一個 zone** —— 要在它自己 zone 底下另設一條。
+
+### 驗證方式
+
+**不要用 curl** —— zone 上的 Super Bot Fight Mode 會把它擋成 challenge,你量到的是 Cloudflare
+自己的標頭,不是規則的效果。用瀏覽器 DevTools → Network → 點 document 請求看 Response Headers。
+挑一個**本來完全沒有標頭**的站驗最準(例如 snapdeck),兩個標頭都出現才算數。
 
 ---
 
