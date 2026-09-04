@@ -241,6 +241,28 @@ HSTS 與 TLS 版本另外開:**SSL/TLS → Edge Certificates → Enable HSTS**,�
 | **Transform Rule** | phase 連 entrypoint 都沒有,**從未建立** | ✅ 已建並線上驗證 |
 | family-feast `MIGRATE_TOKEN` | 端點已於 `b06d335` 移除,secret 仍在 | ✅ 已刪 |
 
+**同日事故:dashboard 上的 CSP 把 mahou 的 ambient 背景全擋掉**
+
+補完 zone headers 之後,`mahou.ai-apps.work/ambient` 整片背景變黑。console:
+
+```
+Refused to load the image 'https://family-feast.ai-apps.work/media/...'
+because it violates the following CSP directive: "img-src 'self' data: blob:"
+```
+
+那條 CSP **不在 mahou 的 repo 裡**——worker、public、wrangler.toml 都 grep 不到,
+是設在 Cloudflare dashboard 上的。它照 `/host` 的需求寫(`script-src` 放了 cdnjs,
+因為 host.html 用它載 QR code 產生器),但同一個站的 `/ambient` 背景是**跨站**讀
+family-feast 的 `/media/`,`img-src 'self'` 一律擋。順帶把 Cloudflare 自己注入的
+Web Analytics beacon 也擋了。
+
+處置:CSP 收回 `public/_headers`(mahou `claude/ambient-csp-img-src`),涵蓋六個頁面
+實際用到的來源;dashboard 那條要移除,否則 `set static` 會蓋掉 repo 的標頭。
+
+> 這正好是 §1.4 那句「CSP 不能一刀切」的實例,而且多一層:**CSP 也不能只看一個頁面就寫**。
+> 同一個站的兩頁,外部資源可以完全不同。這也是為什麼 §3 只放 `nosniff`/`XFO` 這種
+> 全站一致的標頭——CSP 一旦離開 repo,壞掉的時候沒有人查得到原因。
+
 **三個貫穿整輪的教訓**
 
 1. **把「打算做」寫成「已經做」比沒寫更危險。** HSTS、Min TLS、Transform Rule 三項都被
@@ -259,17 +281,23 @@ HSTS 與 TLS 版本另外開:**SSL/TLS → Edge Certificates → Enable HSTS**,�
 
 **還沒做的**
 
-- **供應商端 spend cap**(Google AI Studio / Speechmatics)—— 在程式端的配額之外,
-  這是唯一不受任何競態影響的硬上限。**四個付費站都要設,並把數字記進下表**:
-
-  | 專案 | 供應商 | 上限 | 警示寄到 | 設定日期 |
-  |---|---|---|---|---|
-  | sukemu | Google AI Studio | ⬜ | | |
-  | kikemu | Google + Speechmatics | ⬜ | | |
-  | manemu | Google AI Studio | ⬜ | | |
-  | ytplayer | Google AI Studio | ⬜ | | |
-
 - 各站剩下的 Low/Info(清單見 `ai-apps-works` 的 `security/reports/`)。
+
+**供應商端 spend cap —— 2026-09-04 已處置**
+
+程式端的配額擋的是「單一使用者花太多」,擋不住「金鑰外流之後被別人整批打」。
+供應商端的硬上限是唯一不受任何競態影響的那道,四個付費站都靠它收尾:
+
+| 專案 | 供應商 | 狀態 | 說明 |
+|---|---|---|---|
+| sukemu | Google AI Studio | ✅ 已設 | 上限設在 AI Studio 的帳單專案上 |
+| manemu | Google AI Studio | ✅ 已設 | 同上 |
+| ytplayer | Google AI Studio | ✅ 已設 | 同上 |
+| kikemu | Google AI Studio | ✅ 已設 | 同上 |
+| kikemu | Speechmatics | ✅ 不適用 | **帳號沒放信用卡**,用完免費額度就停,天花板比任何自訂上限都硬 |
+
+> 數字與警示信箱刻意不寫進 repo(這份文件是公開的)。要查就到
+> AI Studio → Billing → Budgets & alerts。改動上限時回來把日期補一行。
 
 ---
 
