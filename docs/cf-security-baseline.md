@@ -39,7 +39,19 @@
 | 逐項檢查 `exp` / `iss` / `aud` / `nonce` / `email_verified` | ✅ | 同上 | ✔ |
 | 驗簽方法寫死 RS256(不吃 header `alg` → 無 alg-confusion / `alg:none`) | ✅ | 同上 | ✔ |
 | OAuth `state` + `nonce` 防 CSRF/replay(存簽章 cookie) | ✅ | `sk_oauth` cookie | ✔ |
-| 開發用 Email 直登**只在未設 OIDC 時**開放 | ✅ | `/api/login`,設了 `GOOGLE_CLIENT_ID` 即自動 403 | ✔ |
+| 開發用 Email 直登需要**明確 opt-in** | ✅ | `/api/login` 要 `DEV_LOGIN=1`(只放 `.dev.vars`)**且** host 是本機 | ✔ |
+
+> ⚠️ **2026-09-04 修正的判準錯誤,新專案務必照這一條。** 這一列原本寫的是「只在未設 OIDC 時開放」,
+> 也就是拿 `GOOGLE_CLIENT_ID` 有沒有設當「是不是正式環境」的判準。那句話字面上沒錯,
+> 但它的反面是:**缺 `GOOGLE_CLIENT_ID` = 整站無認證** —— `/api/login` 開著,
+> 而 `prodSecretMissing` 也連帶為 false,`SESSION_SECRET` 靜默退回公開的 `dev-insecure-secret`,
+> 兩條路都通,任何人送一個 email 就是 admin(`ADMIN_EMAILS` 就寫在公開 repo 的 `wrangler.jsonc`)。
+> kikemu 的正式站在 2026-09-04 被實測就是這個狀態,持續了整段上線期間。
+>
+> **判準不能綁在另一個也可能忘記設的 secret 上。** 改成由開發環境自己舉手:
+> `DEV_LOGIN=1` 只放 `.dev.vars`(已 gitignore、`wrangler deploy` 不會帶上去),
+> 所以正式部署不可能意外成立;`prodSecretMissing` 也改成「非開發環境且缺 `SESSION_SECRET`」即關門。
+> 這樣「忘了設 OIDC」的失效模式是**全站鎖死**,而不是零憑證 admin。
 
 ### 1.2 Session
 
@@ -68,7 +80,19 @@
 | 控制 | sukemu | 說明 | 正式必備 |
 |---|:--:|---|:--:|
 | 上傳大小上限 | ✅ | `MAX_IMAGE_B64` 14MB → 413 | ✔ |
-| 每人每日配額(Durable Object 計數) | ✅ | `worker/quota.ts`,失敗不扣額 | ✔(有 API 成本時) |
+| 每人每日配額:DO 內**原子預扣**(reserve → 呼叫上游 → settle) | ✅ | `worker/quota.ts` 的 `/reserve` `/settle` `/release`;失敗不扣額 | ✔(有 API 成本時) |
+| 每人**同時進行中**的請求上限 | ✅ | `MAX_INFLIGHT`,在 DO 內計數 | ✔ |
+| 配額服務出錯時 **fail-closed** | ✅ | DO 讀寫失敗回 503,不放行 | ✔ |
+
+> ⚠️ **2026-09-04 修正:只有「計數」是不夠的。** 這一列原本標 ✅,但實作是
+> read-then-act:向 DO 讀 usage → 呼叫上游 → 事後 `waitUntil` 入帳,DO 只負責計數。
+> 競態窗口是**整段上游延遲**(sukemu 精準模式單張約 13 秒),所以並行 N 個請求
+> 全都讀到同一個舊值 —— 額度是 N 倍,不是原本註解估的「多一兩張」。全站預算
+> 同樣能被單一使用者一次 burst 穿透,而且 DO 讀取失敗時是 fail-open。
+>
+> **新專案的正確形狀:** 檢查與預扣在 DO 內一次做完(DO 單執行緒 + input gate,
+> 天然序列化),上游回來後 `settle` 換成實際用量,失敗則 `release`。預扣值估高不估低。
+> kikemu 與 manemu 的 relay 是同一套設計問題,修法見各自的 repo。
 | 依實際 token 數估算成本、逐人累計 | ✅ | `estCostTwd` | — |
 | 外部 API 錯誤不把 raw 訊息全丟回 client | ⚙️ | 目前 500 會回 `err.message`(輕微資訊揭露,不含金鑰) | 建議收斂 |
 

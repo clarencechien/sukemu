@@ -24,9 +24,17 @@ export const b64u = {
    寧可全站登入失敗、逼運維補上 secret,也不要靜默放行偽造 session。 */
 const DEV_SECRET = 'dev-insecure-secret';
 const secret = (env: Env) => env.SESSION_SECRET || DEV_SECRET;
-/** 正式環境(已設 GOOGLE_CLIENT_ID)卻缺少獨立 SESSION_SECRET → 危險組態 */
+/** 開發環境的唯一判準:DEV_LOGIN=1。它只放 .dev.vars(已 gitignore,
+ *  `wrangler deploy` 不會帶上去),所以正式部署不可能意外變成開發環境。 */
+export const devEnv = (env: Env) => env.DEV_LOGIN === '1';
+/** 非開發環境卻缺少獨立 SESSION_SECRET → 危險組態,關門。
+ *  ⚠️ 2026-09-04:原本這裡要求 `!!env.GOOGLE_CLIENT_ID`,於是「兩把都沒設」這個
+ *  最危險的組合完全沒被涵蓋 —— /api/login 開著、session 又用公開的 dev 值簽章,
+ *  任何人送一個 email 就是 admin(而 ADMIN_EMAILS 就寫在公開 repo 的 wrangler.jsonc)。
+ *  PR #14 的 fail-closed 只覆蓋「有 OIDC 但缺 SESSION_SECRET」。判準不能綁在
+ *  另一個也可能忘記設的 secret 上,所以改成由開發環境自己舉手。 */
 const prodSecretMissing = (env: Env) =>
-  !!env.GOOGLE_CLIENT_ID && (!env.SESSION_SECRET || env.SESSION_SECRET === DEV_SECRET);
+  !devEnv(env) && (!env.SESSION_SECRET || env.SESSION_SECRET === DEV_SECRET);
 
 function hmacKey(s: string) {
   return crypto.subtle.importKey('raw', enc.encode(s), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
