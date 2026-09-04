@@ -163,24 +163,115 @@
 路徑:Dashboard → `ai-apps.work` zone → **Rules → Transform Rules → Modify Response Header → Create**
 
 ```
-表達式:  (http.host wildcard "*.ai-apps.work")
-         and not (http.host in {"sukemu.ai-apps.work" "manemu.ai-apps.work"})
-動作:    Set static  X-Frame-Options            = DENY
-         Set static  X-Content-Type-Options      = nosniff
-         Set static  Referrer-Policy             = strict-origin-when-cross-origin
+表達式:  http.host wildcard "*.ai-apps.work"
+動作:    Set static  X-Content-Type-Options  = nosniff
+         Set static  X-Frame-Options         = DENY
 ```
-> 排除付費站,是因為它們的 worker 已自帶完整 headers,讓 app 自己的值權威。
 
-HSTS 另外開:**SSL/TLS → Edge Certificates → Enable HSTS**(zone 一次全開)。
+**✅ 2026-09-04 已實際建立並線上驗證**(snapdeck 的回應確認帶著這兩個標頭)。
 
-### ⚠️ 三個陷阱
-1. **CSP 不能放進這條全域規則** —— 每個 app 需求不同,全域塞一份不是弄壞 demo 就是寬鬆到沒用。CSP 各 app 自理。
-2. **`*.workers.dev` 不吃 zone 規則** —— 那是 Cloudflare 自己的網域,連 Transform Rules 都不能設,只能在**程式碼裡**加 header(`auth`、`bubbobgpt`、`drop-*`、`holy-cake` 都在這)。
-3. **`sw-tech.tk` 是另一個 zone** —— 要在它自己 zone 底下另設一條。
+> ⚠️ **這份設定在 2026-09-04 改過,上一版是錯的,不要照舊版做。** 舊版設三個標頭
+> 並排除 sukemu/manemu。兩個問題:
+>
+> **一、`Referrer-Policy` 不能放進來。** Transform Rule 的 `Set static` 是**覆寫**,而
+> kaburi、mahou、bentodrop 自己送的是更嚴格的 `no-referrer` —— 一條 zone-wide 規則會把
+> 它們**降級**成 `strict-origin-when-cross-origin`。這個標頭各 app 值不同,和 CSP 一樣
+> 屬於「不該全域化」的那一類。
+>
+> **二、拿掉第三個標頭之後,排除清單就沒有必要,而且有害。** 剩下這兩個標頭這裡沒有任何
+> 站需要別的值(沒人要 `SAMEORIGIN`,`nosniff` 也只有一個值),覆寫成相同的值是零影響。
+> 反過來說,排除 sukemu 會留下一個縫:它的 worker 只在部分路徑送 `SEC_HEADERS`,
+> `/api/*` 的 JSON 回應沒有 —— 排除掉等於兩邊都沒有,而 zone 規則正好能無痛補上。
+> **少一份要維護的名單,新開的 demo 站也自動被涵蓋,那本來就是這條規則存在的理由。**
+
+HSTS 與 TLS 版本另外開:**SSL/TLS → Edge Certificates → Enable HSTS**,同一頁把
+**Minimum TLS Version 設 1.2**。
+
+> ⚠️ **這兩項在 2026-09-04 之前一直是關的**,而這份文件與 manemu README 都已經寫成
+> 「已開」。實查結果是 `strict_transport_security.enabled: false`、`min_tls_version: "1.0"`。
+> **把「打算做」寫成「已經做」比沒寫更危險** —— 之後每一次稽核都會拿這份文件當基準。
+> 現在兩項都已設定完成。
+
+### ⚠️ 四個陷阱
+1. **不要建錯清單。** Transform Rules 頁面底下有三個各自獨立的清單:
+   `Modify Request Header` / `Modify Response Header` / `Rewrite URL`。
+   **Request header 是改「送進 Worker 的請求」,瀏覽器根本看不到** ——
+   在請求上設 `X-Frame-Options` 對安全完全沒有作用。要建在 **Modify Response Header** 那一區。
+   (2026-09-04 實際建錯過一次,畫面上唯一的差別是那行小字寫 "up to 30 **request** headers"。)
+2. **CSP 不能放進這條全域規則** —— 每個 app 需求不同,全域塞一份不是弄壞 demo 就是寬鬆到沒用。CSP 各 app 自理。`Referrer-Policy` 同理,見上面。
+3. **`*.workers.dev` 不吃 zone 規則** —— 那是 Cloudflare 自己的網域,連 Transform Rules 都不能設,只能在**程式碼裡**加 header(`auth`、`bubbobgpt`、`drop-*`、`holy-cake` 都在這)。
+4. **`sw-tech.tk` 是另一個 zone** —— 要在它自己 zone 底下另設一條。
+
+### 驗證方式
+
+**不要用 curl** —— zone 上的 Super Bot Fight Mode 會把它擋成 challenge,你量到的是 Cloudflare
+自己的標頭,不是規則的效果。用瀏覽器 DevTools → Network → 點 document 請求看 Response Headers。
+挑一個**本來完全沒有標頭**的站驗最準(例如 snapdeck),兩個標頭都出現才算數。
 
 ---
 
 ## 4. Audit 紀錄
+
+### 2026-09-04 — 十個專案完整原始碼審查 + Cloudflare 設定實測
+
+方法:每個 repo 逐條追資料流(不只 recon),再用一把當日到期的**唯讀 API token**
+實查所有 repo 驗不到的 dashboard 設定。完整報告在 `clarencechien/ai-apps-works` 的
+`security/`(彙整)與 `security/reports/`(各站行號證據)。
+
+**結果:1 個 Critical(已關閉)、3 個 High(全部修完上線)、22 項已處置。**
+
+| 站 | 處理了什麼 |
+|---|---|
+| kikemu | **Critical:實測 `mode:dev`,任何人零憑證取得無上限 admin。** 已設 OIDC 並修掉 dev 直登的 fail-open;並行 `/ws` 配額 ×N;靜音 session 不計費 |
+| ytplayer | **High:`cf-access-*` header 被當明文憑證,套用在所有路徑**(Access 只蓋 `/admin/*`)。改驗 JWT 簽章;`INGEST_KEY` 未設時的 fail-open 改 fail-closed |
+| mahou | **High:主控台 stored XSS**(09 月那輪只修了同一列四個 sink 裡的一個)。伺服器端收斂型別 + 前端跳脫;host 身分改由簽章推導;`/export` 要求 host 憑證 |
+| sukemu | 三道錢包保險絲改 DO 內原子預扣;P2 輸入上限;dev 直登 |
+| manemu | 同一套配額問題;無輸出 session 對所有保險絲隱形;回譯接上額度 |
+| bentodrop | 配對碼三次上限可併發繞過;approve 後仍可 claim;deploy script 會重生成 VAPID 私鑰 |
+
+**Cloudflare 設定實測(這一段是這份文件最需要更新的部分)**
+
+| 項目 | 實測 | 處置 |
+|---|---|---|
+| R2 bucket 公開存取 | 15 個 bucket,**六個敏感的全部私有**;唯一公開的就叫 `public` | ✅ 無需處理 |
+| ytplayer 的 WAF Skip 規則 | 09-04 記錄的 mis-scope **已修好**,而且只跳過 SBFM 而非 All remaining | ✅ 表達式已抄進報告 |
+| 各 Worker secret | 全部到位 | ✅ |
+| **HSTS** | `enabled: false, max_age: 0` —— **從未開過**,而 §3 與 family-feast README 都寫成已開 | ✅ 已開 |
+| **Min TLS** | `"1.0"` —— manemu README 寫「Min TLS 1.2 開」 | ✅ 已改 1.2 |
+| **Transform Rule** | phase 連 entrypoint 都沒有,**從未建立** | ✅ 已建並線上驗證 |
+| family-feast `MIGRATE_TOKEN` | 端點已於 `b06d335` 移除,secret 仍在 | ✅ 已刪 |
+
+**三個貫穿整輪的教訓**
+
+1. **把「打算做」寫成「已經做」比沒寫更危險。** HSTS、Min TLS、Transform Rule 三項都被
+   文件記成已完成,實查全是沒做。而每次稽核都拿這份文件當基準 —— 錯的勾會一路被抄下去。
+   **本節從此只記實查結果,不記打算。**
+2. **判準不要綁在另一個可能忘記設的 secret 上。** kikemu 與 sukemu 都用
+   「`GOOGLE_CLIENT_ID` 有沒有設」當「是不是正式環境」,於是「兩把都沒設」這個最危險的
+   組合完全沒被涵蓋。改成由開發環境自己舉手(`DEV_LOGIN=1`,只放 `.dev.vars`)。
+3. **只有計數不是保險絲。** 三個付費站的配額都是 read-then-act,競態窗口是整段上游延遲,
+   並行 N 條就是 N 倍。要在 DO 內做原子的「檢查+預扣」。
+
+> ⚠️ **驗證的誠實範圍:** 三站的檢查腳本驗的都是**帳目算術**,不驗併發本身 ——
+> 讓「檢查+預扣」變原子的是 Durable Object 的 input gate,Node 重現不了。
+> 不要因為腳本綠了就以為競態被測過。同理,`vitest-pool-workers` 的 D1 會序列化請求,
+> bentodrop 的併發測試在修好之前也是綠的。
+
+**還沒做的**
+
+- **供應商端 spend cap**(Google AI Studio / Speechmatics)—— 在程式端的配額之外,
+  這是唯一不受任何競態影響的硬上限。**四個付費站都要設,並把數字記進下表**:
+
+  | 專案 | 供應商 | 上限 | 警示寄到 | 設定日期 |
+  |---|---|---|---|---|
+  | sukemu | Google AI Studio | ⬜ | | |
+  | kikemu | Google + Speechmatics | ⬜ | | |
+  | manemu | Google AI Studio | ⬜ | | |
+  | ytplayer | Google AI Studio | ⬜ | | |
+
+- 各站剩下的 Low/Info(清單見 `ai-apps-works` 的 `security/reports/`)。
+
+---
 
 ### 2026-08-06 — 全 `*.ai-apps.work` + 周邊站首次 audit
 
