@@ -94,6 +94,49 @@ function modelFor(env: Env, mode: ModelMode, pass: 'p1' | 'p2'): string {
   return (pass === 'p2' ? env.FAST_MODEL_P2 : '') || env.FAST_MODEL || 'gemini-3.5-flash-lite';
 }
 
+/* Gemini 不支援部分地區(香港最常見)。Worker 從使用者連到的 colo 出去,台灣流量
+   常經 HKG → 400「User location is not supported」。同一次呼叫裡重試沒用(同一個
+   colo),所以改由釘在支援地區的 Durable Object 代打,見 worker/relay.ts。 */
+const LOCATION_400 = /location is not supported/i;
+
+const relayRegions = (env: Env) =>
+  (env.RELAY_REGIONS || 'apac-ne,enam').split(',').map(s => s.trim()).filter(Boolean);
+
+/** 這個 400 是不是「出口地區不支援」 */
+async function isLocation400(res: Response): Promise<boolean> {
+  if (res.status !== 400) return false;
+  return LOCATION_400.test(await res.clone().text().catch(() => ''));
+}
+
+/** 送一發給 Gemini:直接出去,撞到地區限制才依序改道 */
+async function send(env: Env, model: string, payload: string): Promise<Response> {
+  const direct = () =>
+    fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+      body: payload,
+    });
+
+  const res = await direct();
+  if (!env.GEMINI_RELAY || !(await isLocation400(res))) return res;
+
+  // locationHint 是 best effort 不是保證,所以準備一串地區依序試
+  for (const region of relayRegions(env)) {
+    console.warn(`[gemini] 出口地區不被支援,改道 ${region} 重送`);
+    const ns = env.GEMINI_RELAY;
+    const stub = ns.get(ns.idFromName(`gemini-${region}`), {
+      locationHint: region as DurableObjectLocationHint,
+    });
+    const r = await stub.fetch('https://relay/call', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model, payload }),
+    });
+    if (!(await isLocation400(r))) return r;
+  }
+  return res; // 每個地區都不行 → 回原始錯誤,讓上面統一處理訊息
+}
+
 export async function generateJSON(
   env: Env,
   model: string,
@@ -113,22 +156,25 @@ export async function generateJSON(
   // 兩者同時給會 400。部分模型沒有某些檔位(3.7-flash 無 minimal)→ 靠下面的 400 fallback
   if (opts.thinkingLevel) config.thinkingConfig = { thinkingLevel: opts.thinkingLevel };
 
-  const call = (generationConfig: Record<string, unknown>) =>
-    fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-      body: JSON.stringify({ contents: [{ parts }], generationConfig }),
-    });
+  const bodyFor = (generationConfig: Record<string, unknown>) =>
+    JSON.stringify({ contents: [{ parts }], generationConfig });
 
-  let res = await call(config);
-  if (res.status === 400 && (opts.highRes || opts.thinkingLevel)) {
+  let res = await send(env, model, bodyFor(config));
+  if (res.status === 400 && (opts.highRes || opts.thinkingLevel) && !(await isLocation400(res))) {
     // 未知/不支援的 generationConfig 欄位 → 400 → 拿掉選配欄位重試一次(通用防禦)
     const { mediaResolution: _m, thinkingConfig: _t, ...rest } = config;
     console.warn(`[gemini] ${model} 拒絕選配欄位,退階重試`);
-    res = await call(rest);
+    res = await send(env, model, bodyFor(rest));
   }
-  // 錯誤訊息帶上模型名:換檔位後出問題時,要一眼看出是哪個模型在報錯
-  if (!res.ok) throw new Error(`Gemini ${res.status}(${model}):${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    // 地區問題不要把 Google 的英文原文丟給使用者 —— 那看起來像帳號壞了,其實是線路
+    if (res.status === 400 && LOCATION_400.test(text)) {
+      throw new Error('這條連線的出口地區 Gemini 不支援,改道後仍失敗。請稍後再試一次');
+    }
+    // 錯誤訊息帶上模型名:換檔位後出問題時,要一眼看出是哪個模型在報錯
+    throw new Error(`Gemini ${res.status}(${model}):${text.slice(0, 300)}`);
+  }
 
   const data = (await res.json()) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
