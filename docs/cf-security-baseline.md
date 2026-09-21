@@ -52,6 +52,12 @@
 > `DEV_LOGIN=1` 只放 `.dev.vars`(已 gitignore、`wrangler deploy` 不會帶上去),
 > 所以正式部署不可能意外成立;`prodSecretMissing` 也改成「非開發環境且缺 `SESSION_SECRET`」即關門。
 > 這樣「忘了設 OIDC」的失效模式是**全站鎖死**,而不是零憑證 admin。
+>
+> **副作用,新專案抄這條時一起抄走**:「host 是本機」那道閘門在 `wrangler dev` 下預設
+> 不成立 —— `routes` 只要有 `custom_domain: true`,wrangler dev 會把 `request.url` 的
+> hostname 與 `Host` header **都改寫成那個自訂網域**,於是開在 `127.0.0.1` 也拿到 403。
+> 解法是開發指令帶 `--host localhost`(本 repo 寫死在 `package.json` 的 `dev:worker`)。
+> 不要為了讓本機能跑而去放寬那道閘門 —— 放寬的是正式站的門,壞的只是開發指令。
 
 ### 1.2 Session
 
