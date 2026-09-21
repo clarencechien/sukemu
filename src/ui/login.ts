@@ -42,9 +42,17 @@ export function initLogin() {
     waitNotice.classList.remove('hidden');
     history.replaceState(null, '', '/');
   }
-  // Turnstile 沒過 → 回跳帶 err,顯示可重試的訊息(不要讓使用者停在裸 403)
+  // Turnstile 沒過 → 回跳帶 err 與分類碼,顯示「能照著做」的訊息
+  // (不要讓使用者停在裸 403,也不要只說「沒過」—— 那種訊息每次都得從頭查)
   if (q.get('err') === 'challenge') {
-    err.textContent = '人機驗證沒有通過,請稍候一下再按一次登入。';
+    const detail: Record<string, string> = {
+      notoken: '人機驗證沒有載入完成就送出了。等驗證方塊出現打勾再按一次登入;若一直沒出現,可能是擋廣告的擴充套件或網路擋掉了 challenges.cloudflare.com。',
+      stale: '人機驗證逾時了(停留太久或按了兩次)。重新整理後再登入一次即可。',
+      secret: '人機驗證的伺服器設定有誤(site key 與 secret 不是同一個 widget),請聯絡管理員。',
+      host: '人機驗證的網域設定有誤,請聯絡管理員。',
+    };
+    err.textContent =
+      detail[q.get('c') ?? ''] ?? '人機驗證沒有通過,請稍候一下再按一次登入。';
     err.classList.remove('hidden');
     history.replaceState(null, '', '/');
   }
