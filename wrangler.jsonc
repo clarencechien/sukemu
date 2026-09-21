@@ -24,9 +24,15 @@
     }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "QUOTA", "class_name": "QuotaCounter" }]
+    "bindings": [
+      { "name": "QUOTA", "class_name": "QuotaCounter" },
+      { "name": "GEMINI_RELAY", "class_name": "GeminiRelay" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["QuotaCounter"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["QuotaCounter"] },
+    { "tag": "v2", "new_sqlite_classes": ["GeminiRelay"] }
+  ],
   "vars": {
     // 模型檔位(決策見 docs/adr/0001-fast-accurate-model-modes.md 及其後記):
     //   fast     省錢(flash-lite),一般菜單 ≈ NT$0.51
@@ -70,6 +76,10 @@
     // 內建表列「牌價」(3.6/3.7-flash 至 2026-12-31 促銷半價,保險絲刻意用牌價寧可高估);
     // 官方調價、新模型、或要對齊促銷帳單,用 MODEL_PRICES 覆寫即可(不必改碼):
     //   "MODEL_PRICES": "{\"gemini-3.6-flash\":[0.75,3.75]}"   ← [輸入, 輸出] USD/百萬 token
+    // Gemini 撞到「出口地區不支援」時,依序改道這些地區(見 worker/relay.ts)。
+    // apac-ne = 日韓(Gemini 支援、離台灣近),enam = 美國(保底)。
+    // locationHint 是 best effort,所以列一串而不是只押一個。
+    "RELAY_REGIONS": "apac-ne,enam",
     "USD_TWD": "31.5"
   },
   "observability": {

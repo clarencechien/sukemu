@@ -20,11 +20,16 @@ import { BilledError, estCostTwd, modeToggleEnabled, resolveMode, runP1, runP2 }
 import { handleAdmin } from './admin';
 import type { Usage } from './quota';
 export { QuotaCounter } from './quota';
+export { GeminiRelay } from './relay';
 
 export interface Env {
   ASSETS: Fetcher;
   R2: R2Bucket;
   QUOTA: DurableObjectNamespace;
+  /** Gemini 出口地區代打(見 worker/relay.ts);撞到 location 400 才會用到 */
+  GEMINI_RELAY: DurableObjectNamespace;
+  /** 改道時依序嘗試的地區,逗號分隔。預設 apac-ne(日韓,低延遲)→ enam(美國,保底) */
+  RELAY_REGIONS?: string;
   GEMINI_API_KEY: string;
   // 模型檔位(ADR 0001):fast 省錢、accurate 品質
   DEFAULT_MODE?: string;

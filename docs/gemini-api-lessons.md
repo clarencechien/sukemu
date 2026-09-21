@@ -88,8 +88,14 @@ minimal 的框橫向漂移、跨欄,它只是**每次都用同樣的方式歪掉
 5. **模型輸出視為敵意輸入**:座標格式指示會被無視(lite 掉回 0–1000 訓練慣例)→
    `normalizeBlocks()` 從值域反推;fs 用外框幾何夾限;P2 修訂做對位驗證
 6. **wrangler `vars` 蓋 dashboard 明文變數**:單一事實來源放 git(wrangler.jsonc 已立碑)
-7. **HKG colo → location 400**(未處理):台灣流量可能經 HKG 出口,Gemini 不支援香港。
-   重試常有效只是因為換了 colo;穩定解是查 `request.cf.colo` 改路由。目前未遇到,遇到再修
+7. **HKG colo → location 400**(2026-09-21 踩到並處理):台灣流量可能經 HKG 出口,
+   Gemini 不支援香港,回 400「User location is not supported」。
+   **關鍵:同一次呼叫裡重試沒有用**——subrequest 還是從同一個 colo 出去;
+   「重試常常就好了」是因為使用者下一次請求可能落到別的 colo,那是運氣不是修復。
+   解法:撞到這個 400 才改由釘在支援地區的 Durable Object 代打(`worker/relay.ts`),
+   地區依序試 `RELAY_REGIONS`(預設 `apac-ne,enam`)。正常路徑完全不繞路,
+   只有撞到才多付一次 fast-fail 的 RTT。locationHint 是 best effort 不是保證,
+   所以列一串而不是只押一個
 8. **供應商端保險絲**:AI Studio Spend 頁每專案上限、prepaid、tier 月上限——程式再錯也燒不破的
    最後一層,開工先設(這層只能在 Google 後台設,不在 repo 裡)
 

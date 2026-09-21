@@ -133,3 +133,26 @@ token 用量為估計值,實際以 app 提示與 `/admin` 顯示為準。
 - 「分塊高解析度」(M6)主要付的是**延遲**不是錢
 - 要壓成本,方向是縮短 P1 輸出或換 P1 的模型,**不是**降影像解析度
 - 換 P2 的模型省很有限
+
+---
+
+# 四、出口地區改道(`RELAY_REGIONS`)
+
+Worker 的 subrequest 是**從使用者連到的那個 colo 出去**的,而台灣的流量常被導去香港;
+Gemini 不支援香港,會回 400「User location is not supported」——症狀就是上傳圖片後
+偶發 400,重新整理再試又好了。
+
+**同一次呼叫裡重試沒有用**(還是同一個 colo 出去);「重試常常就好了」是因為下一次
+請求可能落到別的 colo,那是運氣不是修復。所以撞到這個 400 時,改由**釘在支援地區的
+Durable Object**(`worker/relay.ts`,不存任何狀態,純粹是位置確定的出口)代送。
+
+| var | 預設 | 說明 |
+|---|---|---|
+| `RELAY_REGIONS` | `apac-ne,enam` | 撞到地區 400 時依序改道的地區;留空 = 不改道(直接把 400 吐回去) |
+
+- `apac-ne` = 日韓(Gemini 支援、離台灣最近),`enam` = 美東(保底)
+- 其他可用值見 Cloudflare `locationHint`(`weur` / `eeur` / `apac` / `oc` / `sam` / `afr` …)
+- **正常路徑完全不繞路**:先直送,只有撞到地區 400 才多付一次 fast-fail 的 RTT
+- `locationHint` 是 best effort 不是保證,而且只在物件**第一次建立**時生效 →
+  所以列一串依序試,而不是只押一個
+- 改動 DO class 要記得 `migrations`(已有 `v2` 建 `GeminiRelay`)
