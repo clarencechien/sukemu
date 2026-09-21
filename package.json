@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:worker": "wrangler dev",
+    "dev:worker": "wrangler dev --host localhost",
     "build": "tsc --noEmit && tsc -p worker && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy"

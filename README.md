@@ -10,7 +10,7 @@
 | [`docs/mockup/acetate-lens.html`](docs/mockup/acetate-lens.html) | 互動原型 = 互動與視覺的規格書 |
 | [`docs/oidc-setup.md`](docs/oidc-setup.md) | 一次性部署設定(OAuth、secrets、網域與安全、疑難排解) |
 | [`docs/cf-security-baseline.md`](docs/cf-security-baseline.md) | **安全基線**:新專案從這開始;控制清單、正式/demo 標準、audit 紀錄 |
-| [`docs/config.md`](docs/config.md) | 平常在調的旋鈕:名單、配額、模型檔位、價格 |
+| [`docs/config.md`](docs/config.md) | 平常在調的旋鈕:名單、配額、模型檔位、價格、出口地區改道 |
 | [`docs/gemini-api-lessons.md`](docs/gemini-api-lessons.md) | Gemini API 教訓摘要與落地狀態(thinking 稅、id 對滑、保險絲) |
 | [`docs/adr/`](docs/adr/) | 架構決策紀錄 |
 
@@ -26,11 +26,13 @@ npx wrangler secret put SESSION_SECRET        # openssl rand -hex 32
 npm run deploy                                # build + wrangler deploy
 ```
 
-沒設 `GOOGLE_CLIENT_ID` 時自動退回**開發用 Email 直登**(比對白名單、不經 Google)——本機開發與初次部署跑通用;設好後登入頁自動變成「使用 Google 登入」。
+**正式站一律走 Google OIDC。** 沒設 `GOOGLE_CLIENT_ID` 時登入頁會退回 Email 直登的畫面,但那個端點要**兩道閘門同時成立**才會開:`DEV_LOGIN=1`(只放 `.dev.vars`,已 gitignore、不會被部署)且 host 是本機——所以**部署出去的站不可能用它跑通**,`GOOGLE_CLIENT_ID` 是必設的。刻意不拿「有沒有設 OIDC」當判準:那會讓「忘了設 OIDC」等於把零憑證的 admin 登入開給全世界(姊妹專案實際發生過)。
 
 **Turnstile 是選用的,但要設就得成對**(`TURNSTILE_SITE_KEY` var + `TURNSTILE_SECRET` secret)。只設一邊時 Worker 會自動停用挑戰並留 log 警告——因為前端渲染不出元件、後端卻要求 token,會讓登入 100% 失敗。詳見 [`docs/oidc-setup.md`](docs/oidc-setup.md) 的疑難排解。
 
 `workers.dev` 與 preview URL 在 `wrangler.jsonc` 已關閉(`workers_dev: false` / `preview_urls: false`)——這兩種網址不經 zone,WAF 與 Rate Limiting 全繞過。對外一律走自訂網域。
+
+**CSP 由 Worker 統一送出**(靜態檔也先進 Worker,靠 `run_worker_first`)。其中 `form-action` 必須列出 `https://accounts.google.com`:Chrome 把這條指令套用到**整條重導向鏈**,只寫 `'self'` 會讓 Google 登入永遠到不了,而 console 的錯誤訊息卻指向同源的 `/auth/login`,看起來像無關的錯。Turnstile 的挑戰 widget 另外需要 `frame-src`/`child-src`/`worker-src` 帶 `blob:`。
 
 ## 認證・名單・配額(與 manemu 同機制)
 
@@ -59,8 +61,18 @@ npm run dev          # vite dev server,/api 代理到 8787
 npm run build        # tsc(前端 + worker)+ vite build
 ```
 
-要真的打 Gemini 就建 `.dev.vars`(不進版控):`GEMINI_API_KEY=...`。
-不設 `GOOGLE_CLIENT_ID` 時本機走 Email 直登,方便開發。
+`.dev.vars`(不進版控)放兩個值:
+
+```
+GEMINI_API_KEY=...   # 真的要打 Gemini 才需要
+DEV_LOGIN=1          # 開本機 Email 直登(不設就登不進去)
+```
+
+> **`dev:worker` 的 `--host localhost` 不能拿掉。** `wrangler.jsonc` 的 `routes` 設了
+> `custom_domain: true`,wrangler dev 預設會把 `request.url` 的 hostname 與 `Host` header
+> **都改寫成 `sukemu.ai-apps.work`**,於是 `/api/login` 的「host 是本機」那道閘門永遠不成立,
+> 連在 `127.0.0.1:8787` 上都會拿到 403「此端點僅供本機開發使用」。加上 `--host localhost`
+> 才會真的以本機 host 進 Worker。
 
 模型 A/B(需要真 key):
 
@@ -75,9 +87,11 @@ GEMINI_API_KEY=xxx node scripts/ab-models.mjs 照片.jpg
   - `auth.ts` — OIDC、HMAC session、白名單分級解析(每次請求重算,名單熱更新)
   - `quota.ts` — `QuotaCounter` DO:每人今日張數 / token / 估算 NT$
   - `admin.ts` — `/api/admin/*`:名單與額度管理(session + admin 雙閘門)
+  - `relay.ts` — `GeminiRelay` DO:Gemini 的「出口地區」代打,不存狀態,只是一個位置確定的出口
   - `gemini.ts` — `POST /api/p1` 視覺趟(REST `generateContent`、media_resolution HIGH、結構化輸出、thinking 維持預設);`POST /api/p2` 文字趟(只餵 JSON,在地化+譯註,`thinkingLevel: minimal`——A/B 實測 -81% token、快 4 倍;修訂帶原文回聲做對位驗證,防 index-keyed batch 的 id 對滑)
 - **資料契約** `src/types.ts`(`Block` / `Result`),欄位名前後端共用,不可改;座標一律正規化百分比;`v?: boolean` 標直排文字(前端以 `writing-mode: vertical-rl` 呈現)
 - **座標防呆** 模型常不照 prompt 回 0–100 百分比(lite 檔尤其會掉回 0–1000 的訓練慣例)。`normalizeBlocks()` 從數值範圍推回原始規格(0–1000 / 像素 / 0–1 小數)再換算,並用外框幾何夾住 `fs`——橫排字高 ≤ 框高、直排字寬 ≤ 框寬
+- **出口地區改道** Gemini 不支援香港,而 Worker 的 subrequest 是**從使用者連到的那個 colo 出去**的——台灣流量常被導去 HKG,回 400「User location is not supported」。**同一次呼叫裡重試沒有用**(還是同一個 colo 出去);所以撞到這個 400 才把該發請求交給釘在支援地區的 DO 代送(`RELAY_REGIONS`,預設 `apac-ne` 日韓 → `enam` 美國)。正常路徑完全不繞路
 - **結果保存** `src/db.ts` 裝置端 IndexedDB(§9:譯文不落地伺服器):每筆存壓縮影像 + 縮圖 + blocks + 影像 hash。上傳前先以「hash + 檔位」查紀錄,**同一張圖同一檔位翻過就直接開啟、不重打 API**;「紀錄」面板可瀏覽、重開、刪除;譯文編輯自動回存
 - **PWA**(M5)`public/manifest.json` + `public/sw.js` + `public/icons/`;安裝後 standalone 隱藏網址列。登入頁有安裝按鈕(Android/桌面)與 iOS 加入主畫面指引
   - 快取三分:導覽網路優先、`/assets/` 雜湊檔快取優先、其餘同源 stale-while-revalidate(icons/manifest 才不會卡舊版);`/api/` 不快取

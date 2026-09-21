@@ -28,9 +28,16 @@ npx wrangler secret put GOOGLE_CLIENT_SECRET  # 上一步的 Client secret
 npx wrangler secret put SESSION_SECRET        # 隨機 32+ 字元:openssl rand -hex 32
 ```
 
-> **沒設 GOOGLE_CLIENT_ID 時**,Worker 自動退回「開發用 Email 直登」(輸入 email 比對白名單,
-> 不經 Google)。本機 `wrangler dev` 就是這個模式,方便開發;正式環境設好 secrets 後
-> 登入頁自動變成「使用 Google 登入」。
+> **`GOOGLE_CLIENT_ID` 是必設的,沒有「先不設也能上線」這條路。** 沒設時登入頁會顯示
+> 「開發用 Email 直登」的畫面,但 `/api/login` 要 **`DEV_LOGIN=1`(只放 `.dev.vars`,
+> 不會被部署)且 host 是本機**兩道閘門同時成立才會開 —— 部署出去的站一定拿到
+> 403。刻意不拿「有沒有設 OIDC」當判準:那會讓「忘了設 OIDC」等於把零憑證的 admin
+> 登入開給全世界(姊妹專案 2026-09-04 實際發生過)。
+>
+> 本機開發用 `npm run dev:worker`,它帶了 `--host localhost`。**這個旗標不能拿掉**:
+> `routes` 設了 `custom_domain: true`,wrangler dev 預設會把 `request.url` 的 hostname
+> 與 `Host` header 都改寫成 `sukemu.ai-apps.work`,於是連在 `127.0.0.1` 上也過不了
+> 「host 是本機」那道閘門。
 
 ## 3. R2 與部署
 
@@ -110,6 +117,19 @@ the following Content Security Policy directive: "form-action 'self'"
 **手機能開網頁但登入後跳不回來**:檢查 Google OAuth client 的 redirect URI
 是否與 `CANONICAL_HOST` 一致(含 `https://` 與 `/auth/callback`)。
 
+**登入成功,但上傳圖片後偶發 400 / 訊息提到 location**(2026-09-21 修正)
+
+Gemini 不支援香港,而 Cloudflare Worker 的 subrequest 是**從使用者連到的那個 colo
+出去**的 —— 台灣流量常被導去 HKG,於是回 400「User location is not supported」。
+會「偶發」是因為下一次請求可能落到別的 colo。
+
+已處理:撞到這個 400 時自動改道釘在支援地區的 Durable Object 重送
+(地區見 var `RELAY_REGIONS`,預設 `apac-ne,enam`;機制見 [`config.md`](config.md) 第四節)。
+若仍看到「這條連線的出口地區 Gemini 不支援,改道後仍失敗」,代表列出的地區都沒送成:
+先看 Worker log 有沒有 `[gemini] 出口地區不被支援,改道 … 重送`,再考慮把
+`RELAY_REGIONS` 換成別的地區。**注意 `GeminiRelay` 是新的 DO class,
+部署前確認 `wrangler.jsonc` 的 `migrations` 有 `v2`**(`npm run deploy` 會自動跑)。
+
 ## 6. 驗收
 
 - [ ] 開正式網域 → 登入頁顯示「使用 Google 登入」(不是 Email 輸入框)
@@ -117,3 +137,4 @@ the following Content Security Policy directive: "form-action 'self'"
 - [ ] 用名單外的帳號登入 → 回登入頁並顯示等候名單卡,`/admin` 看得到該筆
 - [ ] 用 admin 帳號開 `/admin` → 看得到名單;用非 admin 帳號開 → 「沒有管理權限」
 - [ ] 設了 `CANONICAL_HOST` 後,workers.dev 網址被 301/403
+- [ ] 登入後上傳一張圖 → 翻譯完成並顯示「本次約 NT$X」(不是 400)
