@@ -75,19 +75,37 @@ npm run deploy
 
 ## 5. 疑難排解
 
-**登入按下去出現「challenge required」/ 一直回登入頁**
+**登入按下去,回到登入頁說人機驗證沒過**
 
-先看 `curl https://<網域>/api/config` 的 `turnstileSiteKey`:
+登入頁現在會直接說是哪一種(Worker 也會在 log 留同一個代碼),不用再從頭猜:
 
-| 症狀 | 原因 | 處理 |
+| 畫面訊息 / `?c=` | 代表 | 處理 |
 |---|---|---|
-| `turnstileSiteKey: null` 但你設過 `TURNSTILE_SECRET` | **只設了一半**:前端渲染不出元件、後端卻要求 token | 補上 `TURNSTILE_SITE_KEY` var 後部署;或把 secret 刪掉(`wrangler secret delete TURNSTILE_SECRET`)完全停用 |
-| 有 site key,但手機常失敗、桌面正常 | 行動網路較常拿到**需要互動**的挑戰,使用者在勾選完成前就按了登入 | 已修:token 到手前按鈕禁用並顯示「驗證中…」 |
-| 兩者都設了仍失敗 | widget 的 hostname 清單沒有 `sukemu.ai-apps.work` | Turnstile 後台把 sukemu 的網域加進那個共用 widget |
-| log 出現 `token 是在 … 解的` | siteverify 回的 hostname 不是本站 —— 有人拿別站解的 token 來登入 | 正常情況不會出現;共用 secret 的站別綁定就是靠這一條 |
+| `notoken`「沒有載入完成就送出」 | widget 根本沒產出 token | 多半是 **widget 的 hostname 清單沒有 `sukemu.ai-apps.work`**(共用 manemu 那個 widget 就要加);其次是擋廣告的擴充套件 / 網路擋掉 `challenges.cloudflare.com` |
+| `secret`「site key 與 secret 不是同一個 widget」 | siteverify 回 `invalid-input-secret` | 兩把值要來自**同一個** widget;重設 `TURNSTILE_SECRET` |
+| `host` | token 是在別的網域解的 | 共用 secret 的站別綁定擋下了;正常使用不會出現 |
+| `stale` | token 逾時或重複使用 | 重新整理再登入 |
 
-> 現在只設一半時 Worker 會**自動停用**挑戰並在 log 留警告,不會再把登入鎖死;
-> 驗證失敗也一律導回 `/?err=challenge` 顯示可重試的訊息,不會停在裸 403 頁。
+`curl https://<網域>/api/config` 的 `turnstileSiteKey` 若是 `null`,代表兩把值沒設齊
+(或 `TURNSTILE` 被設成 `off`),Worker 會自動停用挑戰而不是把人鎖在門外。
+
+> **被鎖在門外的逃生門**:`wrangler.jsonc` 加 `"TURNSTILE": "off"` 再部署,
+> 兩把值都留著、只是暫時不驗。widget 設定修好後把這行拿掉即可。
+
+**按了登入完全沒反應 / 跳不到 Google**(2026-09-21 修正)
+
+CSP 的 `form-action` **必須列出 `https://accounts.google.com`**。登入表單原生
+POST `/auth/login` 之後 Worker 會 302 到 Google,而 Chrome 把 `form-action`
+套用到整條重導向鏈 —— 只寫 `'self'` 的話 Google 登入永遠到不了,
+而且 console 的訊息會指向 `/auth/login` 這個同源網址,看起來像無關的錯:
+
+```
+Refused to send form data to '…/auth/login' because it violates
+the following Content Security Policy directive: "form-action 'self'"
+```
+
+同理 Turnstile 的挑戰 widget 需要 `blob:` 的 frame/worker(Cloudflare 自家挑戰頁
+的 CSP 也這樣寫),`frame-src` / `child-src` / `worker-src` 都要帶 `blob:`。
 
 **手機能開網頁但登入後跳不回來**:檢查 Google OAuth client 的 redirect URI
 是否與 `CANONICAL_HOST` 一致(含 `https://` 與 `/auth/callback`)。

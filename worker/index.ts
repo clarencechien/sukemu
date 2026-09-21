@@ -41,6 +41,8 @@ export interface Env {
   SESSION_SECRET?: string;
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_SECRET?: string;
+  /** "off" = 停用人機驗證(兩把值都留著)。widget 設定出包把人鎖在門外時的逃生門 */
+  TURNSTILE?: string;
   // P2 thinking 檔位:minimal(預設,A/B 實測 -81% token)| low | medium | high | off(回模型預設)
   P2_THINKING_LEVEL?: string;
   // 名單與配額
@@ -82,15 +84,23 @@ const bad = (msg: string, status = 400) => json({ ok: false, error: msg }, { sta
 //    設計決定不是安全決定,不該由這裡代做。所以放行,並且把理由寫在這裡。
 // 2. base-uri 'self':沒有這一條,一個注進來的 <base href> 就能把整頁的相對網址
 //    改寫到別人的網域。CSP 沒有 unsafe-inline,擋得住 script,擋不住這個。
-// 3. form-action 'self':同理,擋掉注進來的 <form action="https://…">。
+// 3. form-action:擋掉注進來的 <form action="https://…">。但**不能只寫 'self'** ——
+//    登入表單原生 POST /auth/login 之後,Worker 會 302 到 accounts.google.com,
+//    而 Chrome 把 form-action 套用到整條重導向鏈。只寫 'self' 的結果是
+//    「Turnstile 過了也永遠到不了 Google」,而且 console 的訊息會指向
+//    /auth/login 這個同源網址,看起來像無關的錯(2026-09-21 本機重現確認)。
+//    所以把 OIDC 的目的地一起列進去 —— 這是白名單,不是放寬。
+// 4. blob::Turnstile 的挑戰 widget 會用 blob: 的 frame/worker
+//    (Cloudflare 自家挑戰頁的 CSP 也是這樣寫的),少了它 widget 可能渲染不出來。
 const SEC_HEADERS: Record<string, string> = {
   'content-security-policy':
     "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; " +
-    "frame-src https://challenges.cloudflare.com; connect-src 'self' https:; " +
+    "frame-src https://challenges.cloudflare.com blob:; " +
+    "child-src https://challenges.cloudflare.com blob:; connect-src 'self' https:; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' https://fonts.gstatic.com; " +
-    "img-src 'self' data: blob:; worker-src 'self'; object-src 'none'; " +
-    "base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    "img-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; " +
+    "base-uri 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'",
   'x-frame-options': 'DENY',
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'strict-origin-when-cross-origin',
@@ -109,7 +119,8 @@ const sameOrigin = (req: Request) => {
    只設 secret 會讓前端渲染不出元件、後端卻要求 token —— 每次登入必定 403
    「challenge required」,而且沒有任何自救路徑(實測踩過)。
    少了 site key 時挑戰本來就無法運作,關掉不是安全降級,是避免 100% 斷線。 */
-const turnstileOn = (env: Env) => !!(env.TURNSTILE_SECRET && env.TURNSTILE_SITE_KEY);
+const turnstileOn = (env: Env) =>
+  env.TURNSTILE !== 'off' && !!(env.TURNSTILE_SECRET && env.TURNSTILE_SITE_KEY);
 
 const quotaStub = (env: Env, email: string) => env.QUOTA.get(env.QUOTA.idFromName(email));
 const readUsage = async (env: Env, email: string): Promise<Usage> =>
@@ -268,10 +279,20 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     if (turnstileOn(env)) {
       if (req.method !== 'POST') return new Response(null, { status: 302, headers: { location: '/' } });
       if (!sameOrigin(req)) return new Response('forbidden', { status: 403 });
+      /* 失敗一律導回登入頁並帶上「為什麼」。以前只回 err=challenge,使用者看到
+         「沒過 challenge」、log 也只有 hostname 那一種,於是每次都得從頭猜
+         (是 widget 沒渲染?secret 錯?網域沒加?)—— 2026-09-21 又為此查了一輪。
+         c= 只是粗分類,不含任何機密。 */
+      const fail = (code: string, detail?: string) => {
+        console.warn(`[turnstile] 擋下登入:${code}${detail ? ` — ${detail}` : ''}`);
+        return new Response(null, { status: 302, headers: { location: `/?err=challenge&c=${code}` } });
+      };
       // 表單解析失敗(空 body / 非表單 content-type)不該變成裸 500
       const form = await req.formData().catch(() => null);
       const token = form?.get('cf-turnstile-response');
-      if (!token) return new Response(null, { status: 302, headers: { location: '/?err=challenge' } });
+      // 沒有 token = widget 根本沒產出來(載不到 api.js、網域不在 widget 的
+      // hostname 清單、或使用者在挑戰完成前就按了送出)
+      if (!token) return fail('notoken');
       const vr = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -287,15 +308,25 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
       // 「免解題繞過」,但少了站別綁定 —— 一個能讓使用者在自己頁面解題的攻擊者
       // 就能替 sukemu 收集通行證。localhost 例外:wrangler dev 拿到的 hostname
       // 就是 localhost,不放行的話本機根本登不進去。
-      const vd = (await vr.json()) as { success: boolean; hostname?: string };
+      const vd = (await vr.json().catch(() => ({ success: false }))) as {
+        success: boolean;
+        hostname?: string;
+        'error-codes'?: string[];
+      };
       const hostOk =
         !vd.hostname || vd.hostname === url.hostname || vd.hostname === 'localhost';
-      if (!vd.success || !hostOk) {
-        if (vd.success && !hostOk) {
-          console.warn(`[turnstile] token 是在 ${vd.hostname} 解的,不是 ${url.hostname}`);
-        }
-        return new Response(null, { status: 302, headers: { location: '/?err=challenge' } });
+      if (!vd.success) {
+        const codes = vd['error-codes'] ?? [];
+        // invalid-input-secret = secret 設錯/與 site key 不同個 widget;
+        // timeout-or-duplicate = token 逾時或重複使用(使用者停太久或按兩次)
+        const c = codes.includes('invalid-input-secret')
+          ? 'secret'
+          : codes.includes('timeout-or-duplicate')
+            ? 'stale'
+            : 'verify';
+        return fail(c, codes.join(',') || 'no error-codes');
       }
+      if (!hostOk) return fail('host', `token 是在 ${vd.hostname} 解的,不是 ${url.hostname}`);
     }
     const state = randomHex();
     const nonce = randomHex();
